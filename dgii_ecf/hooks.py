@@ -7,6 +7,9 @@ app_license = "MIT"
 
 required_apps = ["erpnext"]
 
+after_install = "dgii_ecf.install.ensure_module_owner"
+after_migrate = "dgii_ecf.install.ensure_module_owner"
+
 doc_events = {
     "Sales Invoice": {
         "on_submit": "dgii_ecf.events.sales_invoice.on_submit",
