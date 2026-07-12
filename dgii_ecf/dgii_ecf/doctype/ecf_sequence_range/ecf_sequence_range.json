@@ -1,0 +1,122 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:ECF-SEQ-{company}-{environment}-{ecf_type}-{sequence_from}",
+ "creation": "2026-07-08 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "environment",
+  "ecf_type",
+  "status",
+  "column_break_range",
+  "sequence_from",
+  "sequence_to",
+  "current",
+  "expiry_date"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "environment",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Environment",
+   "options": "TesteCF\nCerteCF\neCF",
+   "reqd": 1
+  },
+  {
+   "fieldname": "ecf_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "e-CF Type",
+   "options": "31\n32\n33\n34\n41\n43\n44\n45\n46\n47",
+   "reqd": 1
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Active\nExhausted\nExpired"
+  },
+  {
+   "fieldname": "column_break_range",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sequence_from",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sequence From",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sequence_to",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sequence To",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "current",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Current"
+  },
+  {
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Expiry Date",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-08 00:00:00",
+ "module": "DGII ECF",
+ "name": "ECF Sequence Range",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

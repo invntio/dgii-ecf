@@ -1,0 +1,13 @@
+[project]
+name = "dgii_ecf"
+authors = [{ name = "Invntio", email = "support@invntio.com" }]
+description = "Provider-agnostic DGII e-CF (electronic invoicing) integration for Frappe/ERPNext — Dominican Republic"
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.bench.dev-dependencies]

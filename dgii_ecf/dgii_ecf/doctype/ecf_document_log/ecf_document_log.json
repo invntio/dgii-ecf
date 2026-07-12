@@ -1,0 +1,161 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:ECF-LOG-{#####}",
+ "creation": "2026-07-08 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "sales_invoice",
+  "ecf_type",
+  "column_break_head",
+  "encf",
+  "status",
+  "reference_section",
+  "internal_track_id",
+  "security_code",
+  "column_break_ref",
+  "qr_url",
+  "signed_date",
+  "payloads_section",
+  "request_json",
+  "response_json",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sales Invoice",
+   "options": "Sales Invoice"
+  },
+  {
+   "fieldname": "ecf_type",
+   "fieldtype": "Data",
+   "label": "e-CF Type"
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "encf",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "eNCF",
+   "unique": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nRECIBIDO\nPROCESANDO\nAceptado\nAceptado Condicional\nRechazado\nERROR",
+   "search_index": 1
+  },
+  {
+   "fieldname": "reference_section",
+   "fieldtype": "Section Break",
+   "label": "Gateway Reference"
+  },
+  {
+   "fieldname": "internal_track_id",
+   "fieldtype": "Data",
+   "label": "Internal Track ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "security_code",
+   "fieldtype": "Data",
+   "label": "Security Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ref",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "qr_url",
+   "fieldtype": "Small Text",
+   "label": "QR URL",
+   "read_only": 1
+  },
+  {
+   "fieldname": "signed_date",
+   "fieldtype": "Data",
+   "label": "Signed Date",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "payloads_section",
+   "fieldtype": "Section Break",
+   "label": "Payloads"
+  },
+  {
+   "fieldname": "request_json",
+   "fieldtype": "Code",
+   "label": "Request JSON",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "response_json",
+   "fieldtype": "Code",
+   "label": "Response JSON",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-08 00:00:00",
+ "module": "DGII ECF",
+ "name": "ECF Document Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
