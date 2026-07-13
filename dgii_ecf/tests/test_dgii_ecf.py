@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from dgii_ecf.printing import get_ecf_print_data, qr_svg_data_uri
 from dgii_ecf.providers.base import EcfResult
 from dgii_ecf.providers.mseller import MSellerProvider
 from dgii_ecf.mseller.client import MSellerError
@@ -62,6 +63,39 @@ def _fake_settings():
     s.base_url = "https://ecf.api.mseller.app"
     s.get_password = MagicMock(return_value="secret")
     return s
+
+
+class TestPrinting(FrappeTestCase):
+    def setUp(self):
+        frappe.set_user("Administrator")
+        self.si = _ensure_test_invoice()
+        frappe.db.delete("ECF Document Log", {"sales_invoice": self.si.name})
+
+    def tearDown(self):
+        frappe.db.delete("ECF Document Log", {"sales_invoice": self.si.name})
+
+    def test_print_data_comes_from_document_log(self):
+        log = frappe.get_doc({
+            "doctype": "ECF Document Log",
+            "company": COMPANY,
+            "sales_invoice": self.si.name,
+            "ecf_type": "32",
+            "encf": "E320000088888",
+            "status": "Aceptado",
+            "security_code": "ABC123",
+            "qr_url": "https://example.invalid/verify",
+        }).insert(ignore_permissions=True)
+
+        data = get_ecf_print_data(self.si.name)
+
+        self.assertEqual(data.name, log.name)
+        self.assertEqual(data.encf, "E320000088888")
+        self.assertEqual(data.qr_url, "https://example.invalid/verify")
+
+    def test_qr_is_an_inline_svg_data_uri(self):
+        data_uri = qr_svg_data_uri("https://example.invalid/verify")
+        self.assertTrue(data_uri.startswith("data:image/svg+xml;base64,"))
+        self.assertEqual(qr_svg_data_uri(None), "")
 
 
 class TestMSellerProviderMapping(FrappeTestCase):

@@ -10,6 +10,20 @@ required_apps = ["erpnext"]
 after_install = "dgii_ecf.install.ensure_module_owner"
 after_migrate = "dgii_ecf.install.ensure_module_owner"
 
+fixtures = [
+    {
+        "doctype": "Print Format",
+        "filters": [["name", "=", "DGII e-CF Sales Invoice"]],
+    }
+]
+
+jinja = {
+    "methods": [
+        "dgii_ecf.printing.get_ecf_print_data",
+        "dgii_ecf.printing.qr_svg_data_uri",
+    ]
+}
+
 doc_events = {
     "Sales Invoice": {
         "on_submit": "dgii_ecf.events.sales_invoice.on_submit",
