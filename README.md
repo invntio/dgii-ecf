@@ -9,6 +9,19 @@ fiscal receipt (e-CF), through a pluggable gateway layer: the fiscal engine
 audit log) is provider-independent, and each gateway is one `EcfProvider`
 subclass. Multi-company (multi-tenant) by design.
 
+## Activation
+
+The app is safe-by-default: installing it creates the DocTypes but does not
+submit, validate, poll, or expire e-CF records until explicitly enabled for the
+site:
+
+```bash
+bench --site your-site set-config dgii_ecf_enabled 1
+```
+
+Leave the key absent or set it to `0` while credentials, certification, or the
+production workflow are not ready.
+
 ## Features
 - e-CF types 31, 32, 33, 34 (crédito fiscal, consumo, nota de débito, nota de crédito)
 - Concurrency-safe eNCF sequence ranges, per company + environment (Test/Cert/Prod)

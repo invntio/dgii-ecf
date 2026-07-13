@@ -3,6 +3,8 @@
 import frappe
 from frappe import _
 
+from dgii_ecf.config import is_enabled
+
 _ECF_BLOCKING_STATUSES = (
     "Pending",
     "RECIBIDO",
@@ -13,6 +15,8 @@ _ECF_BLOCKING_STATUSES = (
 
 
 def is_configured(company: str) -> bool:
+    if not is_enabled():
+        return False
     return bool(
         frappe.db.exists("ECF Provider Settings", {"company": company, "enabled": 1})
     )

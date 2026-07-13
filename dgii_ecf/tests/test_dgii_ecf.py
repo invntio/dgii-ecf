@@ -221,6 +221,8 @@ class TestPolling(FrappeTestCase):
 
     def setUp(self):
         frappe.set_user("Administrator")
+        self._ecf_enabled = frappe.conf.get("dgii_ecf_enabled")
+        frappe.conf.dgii_ecf_enabled = 1
         _ensure_test_company()
         frappe.db.delete("ECF Document Log", {"encf": "E320000099999"})
         self.log = frappe.get_doc({
@@ -229,6 +231,7 @@ class TestPolling(FrappeTestCase):
         }).insert(ignore_permissions=True)
 
     def tearDown(self):
+        frappe.conf.dgii_ecf_enabled = self._ecf_enabled
         frappe.db.delete("ECF Document Log", {"encf": "E320000099999"})
 
     def test_poll_flips_status_to_aceptado(self):

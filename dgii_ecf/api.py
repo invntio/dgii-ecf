@@ -7,6 +7,7 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+from dgii_ecf.config import require_enabled
 from dgii_ecf.ecf.builder import build_ecf_json, pick_ecf_type
 from dgii_ecf.providers.registry import get_provider
 
@@ -57,6 +58,7 @@ def submit_sales_invoice(sales_invoice: str) -> dict:
     returned instead of issuing a second eNCF. Raises on transient send errors so the
     enqueuing layer can retry.
     """
+    require_enabled()
     existing = _existing_live_log(sales_invoice)
     if existing:
         return frappe.get_doc("ECF Document Log", existing).as_dict()
@@ -126,6 +128,7 @@ def submit_sales_invoice(sales_invoice: str) -> dict:
 @frappe.whitelist()
 def validate_only(sales_invoice: str) -> dict:
     """Dry-run against MSeller (`?validate=true`) — consumes no eNCF."""
+    require_enabled()
     si = frappe.get_doc("Sales Invoice", sales_invoice)
     ecf_type = pick_ecf_type(si)
     placeholder_encf = f"E{ecf_type}0000000000"
