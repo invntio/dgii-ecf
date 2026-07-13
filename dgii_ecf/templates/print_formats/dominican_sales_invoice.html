@@ -1,0 +1,136 @@
+{% set fiscal = get_ecf_print_data(doc.name) %}
+<style>
+  .ri { color: #172033; font-family: Arial, sans-serif; font-size: 10px; line-height: 1.25; }
+  .ri-header { display: table; margin-bottom: 12px; width: 100%; }
+  .ri-issuer, .ri-document { display: table-cell; vertical-align: top; width: 50%; }
+  .ri-document { color: #164f86; text-align: right; }
+  .ri-logo { max-height: 54px; max-width: 150px; margin-bottom: 5px; }
+  .ri-company { color: #164f86; font-size: 16px; font-weight: 700; }
+  .ri-document h1 { font-size: 15px; margin: 0 0 5px; }
+  .ri-rule { border-top: 2px solid #3e94d1; margin: 10px 0; }
+  .ri-party { font-size: 11px; line-height: 1.45; padding: 2px 0; }
+  .ri-table { border-collapse: collapse; width: 100%; }
+  .ri-table thead { display: table-header-group; }
+  .ri-table th { background: #d9d9d9; border: 1px solid #9ca3af; font-weight: 700; padding: 5px 4px; text-align: center; }
+  .ri-table td { border: 1px solid #b6bcc5; padding: 5px 4px; }
+  .ri-table .number { text-align: right; white-space: nowrap; }
+  .ri-table .center { text-align: center; }
+  .ri-summary { display: table; margin-top: 12px; page-break-inside: avoid; width: 100%; }
+  .ri-verification, .ri-totals { display: table-cell; vertical-align: top; width: 50%; }
+  .ri-qr { height: 92px; width: 92px; }
+  .ri-verification { line-height: 1.45; }
+  .ri-totals { padding-left: 30px; }
+  .ri-total-row { display: table; width: 100%; }
+  .ri-total-label, .ri-total-value { display: table-cell; padding: 3px 5px; }
+  .ri-total-label { font-weight: 700; text-align: right; width: 60%; }
+  .ri-total-value { border: 1px solid #aab0b8; text-align: right; width: 40%; }
+  .ri-total-final { font-size: 11px; }
+  .ri-warning { background: #fff7ed; border: 1px solid #fb923c; margin: 12px 0; padding: 8px; }
+  .ri-footer { bottom: 8mm; color: #4b5563; font-size: 8px; margin-top: 30px; }
+  .ri-reference { font-weight: 700; margin-top: 4px; }
+  @media print {
+    .ri-summary, .ri-table tr { break-inside: avoid; page-break-inside: avoid; }
+  }
+</style>
+
+<div class="ri">
+  <div class="ri-header">
+    <div class="ri-issuer">
+      {% if fiscal and fiscal.company_logo %}<img class="ri-logo" src="{{ fiscal.company_logo }}">{% endif %}
+      <div class="ri-company">{{ fiscal.issuer_name if fiscal else doc.company }}</div>
+      {% if fiscal and fiscal.issuer_rnc %}<div><strong>{{ _("RNC") }}:</strong> {{ fiscal.issuer_rnc }}</div>{% endif %}
+      {% if fiscal and fiscal.issuer_address %}<div><strong>{{ _("Address") }}:</strong> {{ fiscal.issuer_address }}</div>{% endif %}
+      <div><strong>{{ _("Issue Date") }}:</strong> {{ fiscal.issue_date if fiscal else frappe.format(doc.posting_date, {"fieldtype": "Date"}) }}</div>
+    </div>
+    <div class="ri-document">
+      <h1>{{ _(fiscal.title) if fiscal else _("Invoice") }}</h1>
+      {% if fiscal %}
+        <div><strong>{{ _("eNCF") }}:</strong> {{ fiscal.encf }}</div>
+        {% if fiscal.sequence_expiry %}<div><strong>{{ _("Sequence Expiry Date") }}:</strong> {{ fiscal.sequence_expiry }}</div>{% endif %}
+        {% if fiscal.payment_due %}<div><strong>{{ _("Payment Due Date") }}:</strong> {{ fiscal.payment_due }}</div>{% endif %}
+        {% if fiscal.modified_encf %}<div class="ri-reference"><strong>{{ _("Modified NCF") }}:</strong> {{ fiscal.modified_encf }}</div>{% endif %}
+        {% if fiscal.correction_reason %}<div>{{ fiscal.correction_reason }}</div>{% endif %}
+      {% else %}
+        <div>{{ doc.name }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="ri-rule"></div>
+  <div class="ri-party">
+    <div><strong>{{ _("Customer Legal Name") }}:</strong> {{ fiscal.buyer_name if fiscal else (doc.customer_name or doc.customer) }}</div>
+    {% if fiscal and fiscal.buyer_rnc and fiscal.buyer_rnc != "00000000000" %}<div><strong>{{ _("Customer RNC") }}:</strong> {{ fiscal.buyer_rnc }}</div>{% endif %}
+  </div>
+  <div class="ri-rule"></div>
+
+  {% if not fiscal %}
+    <div class="ri-warning">{{ _("No electronic fiscal receipt has been generated for this invoice.") }}</div>
+  {% endif %}
+
+  <table class="ri-table">
+    <thead>
+      <tr>
+        <th>{{ _("Quantity") }}</th>
+        <th>{{ _("Description") }}</th>
+        <th>{{ _("Unit of Measure") }}</th>
+        <th>{{ _("Price") }}</th>
+        <th>{{ _("ITBIS") }}</th>
+        <th>{{ _("Value") }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if fiscal %}
+        {% for item in fiscal.lines %}
+        <tr>
+          <td class="center">{{ item.quantity }}</td>
+          <td>{{ item.description }}</td>
+          <td class="center">{{ item.uom }}</td>
+          <td class="number">{{ frappe.format(item.rate, {"fieldtype": "Currency", "options": fiscal.currency}) }}</td>
+          <td class="number">{{ frappe.format(item.tax, {"fieldtype": "Currency", "options": fiscal.currency}) }}</td>
+          <td class="number">{{ frappe.format(item.amount, {"fieldtype": "Currency", "options": fiscal.currency}) }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        {% for item in doc.items %}
+        <tr>
+          <td class="center">{{ item.qty }}</td>
+          <td>{{ item.item_name or item.item_code }}</td>
+          <td class="center">{{ item.uom }}</td>
+          <td class="number">{{ frappe.format(item.net_rate, {"fieldtype": "Currency", "options": doc.currency}) }}</td>
+          <td class="number">—</td>
+          <td class="number">{{ frappe.format(item.net_amount, {"fieldtype": "Currency", "options": doc.currency}) }}</td>
+        </tr>
+        {% endfor %}
+      {% endif %}
+    </tbody>
+  </table>
+  <div class="ri-rule"></div>
+
+  <div class="ri-summary">
+    <div class="ri-verification">
+      {% if fiscal and fiscal.qr_url %}
+        <img class="ri-qr" src="{{ qr_svg_data_uri(fiscal.qr_url) }}" alt="{{ _("DGII verification QR code") }}">
+        <div><strong>{{ _("Security Code") }}:</strong> {{ fiscal.security_code }}</div>
+        <div><strong>{{ _("Digital Signature Date") }}:</strong> {{ fiscal.signed_date }}</div>
+      {% endif %}
+    </div>
+    <div class="ri-totals">
+      {% set currency = fiscal.currency if fiscal else doc.currency %}
+      {% set taxable = fiscal.taxable_total if fiscal else doc.net_total %}
+      {% set taxes = fiscal.tax_total if fiscal else doc.total_taxes_and_charges %}
+      {% set total = fiscal.grand_total if fiscal else doc.grand_total %}
+      <div class="ri-total-row"><span class="ri-total-label">{{ _("Taxable Subtotal") }}:</span><span class="ri-total-value">{{ frappe.format(taxable, {"fieldtype": "Currency", "options": currency}) }}</span></div>
+      {% if fiscal and fiscal.exempt_total %}<div class="ri-total-row"><span class="ri-total-label">{{ _("Exempt Subtotal") }}:</span><span class="ri-total-value">{{ frappe.format(fiscal.exempt_total, {"fieldtype": "Currency", "options": currency}) }}</span></div>{% endif %}
+      <div class="ri-total-row"><span class="ri-total-label">{{ _("Total ITBIS") }}:</span><span class="ri-total-value">{{ frappe.format(taxes, {"fieldtype": "Currency", "options": currency}) }}</span></div>
+      <div class="ri-total-row ri-total-final"><span class="ri-total-label">{{ _("Total") }}:</span><span class="ri-total-value"><strong>{{ frappe.format(total, {"fieldtype": "Currency", "options": currency}) }}</strong></span></div>
+    </div>
+  </div>
+
+  <div class="ri-footer">
+    {% if fiscal and fiscal.qr_url %}
+      {{ _("This printed representation can be verified by scanning the DGII QR code.") }}
+    {% else %}
+      {{ _("This document is not valid for fiscal purposes.") }}
+    {% endif %}
+  </div>
+</div>

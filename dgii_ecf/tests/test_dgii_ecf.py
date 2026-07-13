@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from dgii_ecf.events.sales_invoice import set_print_language
 from dgii_ecf.printing import get_ecf_print_data, qr_svg_data_uri
 from dgii_ecf.providers.base import EcfResult
 from dgii_ecf.providers.mseller import MSellerProvider
@@ -84,18 +85,60 @@ class TestPrinting(FrappeTestCase):
             "status": "Aceptado",
             "security_code": "ABC123",
             "qr_url": "https://example.invalid/verify",
+            "request_json": frappe.as_json({
+                "ECF": {
+                    "Encabezado": {
+                        "IdDoc": {"TipoeCF": "32", "eNCF": "E320000088888"},
+                        "Emisor": {
+                            "RNCEmisor": "102320705",
+                            "RazonSocialEmisor": COMPANY,
+                            "FechaEmision": "13-07-2026",
+                        },
+                        "Comprador": {
+                            "RNCComprador": "130123456",
+                            "RazonSocialComprador": "ECF Test Customer",
+                        },
+                        "Totales": {
+                            "MontoGravadoTotal": 1000,
+                            "TotalITBIS": 180,
+                            "MontoTotal": 1180,
+                        },
+                    },
+                    "DetallesItems": {"Item": [{
+                        "CantidadItem": 1,
+                        "NombreItem": "ECF Test Service",
+                        "PrecioUnitarioItem": 1000,
+                        "MontoItem": 1000,
+                        "IndicadorFacturacion": 1,
+                    }]},
+                }
+            }),
         }).insert(ignore_permissions=True)
 
         data = get_ecf_print_data(self.si.name)
 
-        self.assertEqual(data.name, log.name)
+        self.assertEqual(data.log_name, log.name)
         self.assertEqual(data.encf, "E320000088888")
         self.assertEqual(data.qr_url, "https://example.invalid/verify")
+        self.assertEqual(data.title, "Electronic Consumer Invoice")
+        self.assertEqual(data.lines[0].tax, 180)
+        self.assertEqual(data.grand_total, 1180)
 
     def test_qr_is_an_inline_svg_data_uri(self):
         data_uri = qr_svg_data_uri("https://example.invalid/verify")
         self.assertTrue(data_uri.startswith("data:image/svg+xml;base64,"))
         self.assertEqual(qr_svg_data_uri(None), "")
+
+    def test_dominican_company_forces_spanish_print_language(self):
+        doc = frappe._dict(company=COMPANY, language="en")
+        set_print_language(doc)
+        self.assertEqual(doc.language, "es")
+
+    def test_other_countries_keep_invoice_language(self):
+        doc = frappe._dict(company="Foreign Company", language="fr")
+        with patch.object(frappe.db, "get_value", return_value="France"):
+            set_print_language(doc)
+        self.assertEqual(doc.language, "fr")
 
 
 class TestMSellerProviderMapping(FrappeTestCase):

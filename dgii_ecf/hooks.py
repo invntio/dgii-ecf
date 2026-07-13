@@ -24,8 +24,11 @@ jinja = {
     ]
 }
 
+doctype_js = {"Sales Invoice": "public/js/sales_invoice.js"}
+
 doc_events = {
     "Sales Invoice": {
+        "before_validate": "dgii_ecf.events.sales_invoice.set_print_language",
         "on_submit": "dgii_ecf.events.sales_invoice.on_submit",
         "on_cancel": "dgii_ecf.events.sales_invoice.on_cancel",
     }
