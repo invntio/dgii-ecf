@@ -11,7 +11,7 @@
   .ri-party { font-size: 11px; line-height: 1.45; padding: 2px 0; }
   .ri-table { border-collapse: collapse; width: 100%; }
   .ri-table thead { display: table-header-group; }
-  .ri-table th { background: #d9d9d9; border: 1px solid #9ca3af; font-weight: 700; padding: 5px 4px; text-align: center; }
+  .ri-table th { background: #b9bec5; border: 1px solid #858d98; color: #374151; font-weight: 700; padding: 5px 4px; text-align: center; }
   .ri-table td { border: 1px solid #b6bcc5; padding: 5px 4px; }
   .ri-table .number { text-align: right; white-space: nowrap; }
   .ri-table .center { text-align: center; }
@@ -45,9 +45,9 @@
     <div class="ri-document">
       <h1>{{ _(fiscal.title) if fiscal else _("Invoice") }}</h1>
       {% if fiscal %}
-        <div><strong>{{ _("eNCF") }}:</strong> {{ fiscal.encf }}</div>
+        <div><strong>{{ _("e-NCF") }}:</strong> {{ fiscal.encf }}</div>
         {% if fiscal.sequence_expiry %}<div><strong>{{ _("Sequence Expiry Date") }}:</strong> {{ fiscal.sequence_expiry }}</div>{% endif %}
-        {% if fiscal.payment_due %}<div><strong>{{ _("Payment Due Date") }}:</strong> {{ fiscal.payment_due }}</div>{% endif %}
+        {% if fiscal.payment_due %}<div><strong>{{ _("Due Date") }}:</strong> {{ fiscal.payment_due }}</div>{% endif %}
         {% if fiscal.modified_encf %}<div class="ri-reference"><strong>{{ _("Modified NCF") }}:</strong> {{ fiscal.modified_encf }}</div>{% endif %}
         {% if fiscal.correction_reason %}<div>{{ fiscal.correction_reason }}</div>{% endif %}
       {% else %}
@@ -126,11 +126,5 @@
     </div>
   </div>
 
-  <div class="ri-footer">
-    {% if fiscal and fiscal.qr_url %}
-      {{ _("This printed representation can be verified by scanning the DGII QR code.") }}
-    {% else %}
-      {{ _("This document is not valid for fiscal purposes.") }}
-    {% endif %}
-  </div>
+  {% if not fiscal %}<div class="ri-footer">{{ _("This document is not valid for fiscal purposes.") }}</div>{% endif %}
 </div>

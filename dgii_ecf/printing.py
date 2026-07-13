@@ -6,6 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import frappe
 from frappe.twofactor import get_qr_svg_code
+from frappe.utils import formatdate
 
 _DOCUMENT_TITLES = {
     "31": "Electronic Fiscal Credit Invoice",
@@ -114,7 +115,8 @@ def get_ecf_print_data(sales_invoice: str) -> frappe._dict | None:
         company_logo=company.company_logo,
         issue_date=issuer.get("FechaEmision"),
         sequence_expiry=id_doc.get("FechaVencimientoSecuencia"),
-        payment_due=id_doc.get("FechaLimitePago"),
+        payment_due=id_doc.get("FechaLimitePago")
+        or (formatdate(invoice.due_date, "dd-mm-yyyy") if invoice.due_date else None),
         buyer_name=buyer.get("RazonSocialComprador") or invoice.customer_name,
         buyer_rnc=buyer.get("RNCComprador"),
         modified_encf=reference.get("NCFModificado"),

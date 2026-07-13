@@ -121,6 +121,7 @@ class TestPrinting(FrappeTestCase):
         self.assertEqual(data.encf, "E320000088888")
         self.assertEqual(data.qr_url, "https://example.invalid/verify")
         self.assertEqual(data.title, "Electronic Consumer Invoice")
+        self.assertEqual(data.payment_due, frappe.utils.formatdate(self.si.due_date, "dd-mm-yyyy"))
         self.assertEqual(data.lines[0].tax, 180)
         self.assertEqual(data.grand_total, 1180)
 
