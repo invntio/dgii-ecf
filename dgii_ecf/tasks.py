@@ -7,6 +7,7 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+from dgii_ecf.config import is_enabled
 from dgii_ecf.providers.registry import get_provider
 
 # Non-terminal states we keep polling.
@@ -17,6 +18,8 @@ _BATCH = 100  # MSeller batch limit
 
 def poll_pending_documents():
     """Refresh every non-terminal e-CF via the batch status endpoint, per company."""
+    if not is_enabled():
+        return
     rows = frappe.get_all(
         "ECF Document Log",
         filters={"status": ["in", _PENDING], "encf": ["is", "set"]},
@@ -79,6 +82,8 @@ def _notify_rejection(log_name: str):
 
 def expire_ranges():
     """Mark active eNCF ranges whose expiry date has passed."""
+    if not is_enabled():
+        return
     today = frappe.utils.today()
     expired = frappe.get_all(
         "ECF Sequence Range",
