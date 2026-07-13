@@ -13,8 +13,9 @@ after each call captures both first logins and refreshes.
 from __future__ import annotations
 
 import frappe
+from frappe import _
 
-from dgii_ecf.mseller.client import MSellerClient
+from dgii_ecf.mseller.client import MSellerClient, MSellerError
 
 from .base import EcfProvider, EcfResult
 
@@ -68,6 +69,18 @@ class MSellerProvider(EcfProvider):
         finally:
             self._persist_token()
         if validate:
+            # MSeller documents validate=true as a no-submit dry-run, but the
+            # feature can be disabled per account. In that state the gateway may
+            # ignore the query flag and return a normal submission receipt. Never
+            # report that as an ordinary validation failure: the document was
+            # actually signed/queued and needs immediate operator attention.
+            if r.get("internalTrackId") or r.get("ecf") or r.get("qr_url"):
+                raise MSellerError(
+                    _(
+                        "MSeller ignored validate=true and processed the document; "
+                        "dry-run validation is not enabled for this gateway account."
+                    )
+                )
             return EcfResult(
                 success=bool(r.get("valid")),
                 error=None if r.get("valid") else r.get("message"),

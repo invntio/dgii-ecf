@@ -9,6 +9,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from dgii_ecf.providers.base import EcfResult
 from dgii_ecf.providers.mseller import MSellerProvider
+from dgii_ecf.mseller.client import MSellerError
 from dgii_ecf.dgii_ecf.doctype.ecf_sequence_range.ecf_sequence_range import (
     get_next_encf,
 )
@@ -95,6 +96,18 @@ class TestMSellerProviderMapping(FrappeTestCase):
             res = provider.send({"ECF": {}}, validate=True)
         self.assertFalse(res.success)
         self.assertIn("MontoTotal", res.error)
+
+    def test_send_validate_rejects_submission_receipt(self):
+        provider = MSellerProvider(_fake_settings())
+        with patch.object(MSellerProvider, "_client") as client:
+            client.return_value.send_document.return_value = {
+                "ecf": "E320000000000",
+                "internalTrackId": "uuid-unexpected",
+                "securityCode": "ABC123",
+                "qr_url": "https://example.invalid/qr",
+            }
+            with self.assertRaisesRegex(MSellerError, "ignored validate=true"):
+                provider.send({"ECF": {}}, validate=True)
 
     def test_batch_maps_found_and_missing(self):
         provider = MSellerProvider(_fake_settings())
