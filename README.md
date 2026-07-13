@@ -22,6 +22,12 @@ bench --site your-site set-config dgii_ecf_enabled 1
 Leave the key absent or set it to `0` while credentials, certification, or the
 production workflow are not ready.
 
+Explicitly disable it for development, QA, and pre-certification deployments:
+
+```bash
+bench --site your-site set-config dgii_ecf_enabled 0
+```
+
 ## Features
 - e-CF types 31, 32, 33, 34 (crédito fiscal, consumo, nota de débito, nota de crédito)
 - Concurrency-safe eNCF sequence ranges, per company + environment (Test/Cert/Prod)
