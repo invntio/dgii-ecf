@@ -45,6 +45,38 @@ def _company_address(company: str) -> str | None:
     return ", ".join(part for part in parts if part)
 
 
+def _sequence_expiry_for(company: str, ecf_type: str, encf: str) -> str | None:
+    """Return the expiry of the authorized range containing ``encf``.
+
+    Only some e-CF payload types carry ``FechaVencimientoSecuencia``. The
+    printed representation still needs the range expiry for every e-NCF, so
+    resolve it from the same company/environment/type range when absent.
+    """
+    try:
+        sequence = int(encf[3:])
+    except (TypeError, ValueError):
+        return None
+
+    environment = frappe.db.get_value(
+        "ECF Provider Settings", {"company": company}, "environment"
+    )
+    if not environment:
+        return None
+
+    expiry = frappe.db.get_value(
+        "ECF Sequence Range",
+        {
+            "company": company,
+            "environment": environment,
+            "ecf_type": ecf_type,
+            "sequence_from": ["<=", sequence],
+            "sequence_to": [">=", sequence],
+        },
+        "expiry_date",
+    )
+    return formatdate(expiry, "dd-mm-yyyy") if expiry else None
+
+
 def get_ecf_print_data(sales_invoice: str) -> frappe._dict | None:
     """Build the printed representation from the exact e-CF request and log.
 
@@ -114,9 +146,8 @@ def get_ecf_print_data(sales_invoice: str) -> frappe._dict | None:
         issuer_address=_company_address(invoice.company) or issuer.get("DireccionEmisor"),
         company_logo=company.company_logo,
         issue_date=issuer.get("FechaEmision"),
-        sequence_expiry=id_doc.get("FechaVencimientoSecuencia"),
-        payment_due=id_doc.get("FechaLimitePago")
-        or (formatdate(invoice.due_date, "dd-mm-yyyy") if invoice.due_date else None),
+        sequence_expiry=id_doc.get("FechaVencimientoSecuencia")
+        or _sequence_expiry_for(invoice.company, log.ecf_type, log.encf),
         buyer_name=buyer.get("RazonSocialComprador") or invoice.customer_name,
         buyer_rnc=buyer.get("RNCComprador"),
         modified_encf=reference.get("NCFModificado"),

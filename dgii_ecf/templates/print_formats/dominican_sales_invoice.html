@@ -47,7 +47,6 @@
       {% if fiscal %}
         <div><strong>{{ _("e-NCF") }}:</strong> {{ fiscal.encf }}</div>
         {% if fiscal.sequence_expiry %}<div><strong>{{ _("Sequence Expiry Date") }}:</strong> {{ fiscal.sequence_expiry }}</div>{% endif %}
-        {% if fiscal.payment_due %}<div><strong>{{ _("Due Date") }}:</strong> {{ fiscal.payment_due }}</div>{% endif %}
         {% if fiscal.modified_encf %}<div class="ri-reference"><strong>{{ _("Modified NCF") }}:</strong> {{ fiscal.modified_encf }}</div>{% endif %}
         {% if fiscal.correction_reason %}<div>{{ fiscal.correction_reason }}</div>{% endif %}
       {% else %}

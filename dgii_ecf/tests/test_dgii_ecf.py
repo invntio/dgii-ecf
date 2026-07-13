@@ -8,9 +8,14 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from dgii_ecf.events.sales_invoice import set_print_language
-from dgii_ecf.printing import get_ecf_print_data, qr_svg_data_uri
+from dgii_ecf.printing import (
+    _sequence_expiry_for,
+    get_ecf_print_data,
+    qr_svg_data_uri,
+)
 from dgii_ecf.providers.base import EcfResult
 from dgii_ecf.providers.mseller import MSellerProvider
+from dgii_ecf.readiness import validate_sales_invoice_readiness
 from dgii_ecf.mseller.client import MSellerError
 from dgii_ecf.dgii_ecf.doctype.ecf_sequence_range.ecf_sequence_range import (
     get_next_encf,
@@ -115,13 +120,18 @@ class TestPrinting(FrappeTestCase):
             }),
         }).insert(ignore_permissions=True)
 
-        data = get_ecf_print_data(self.si.name)
+        with patch(
+            "dgii_ecf.printing._sequence_expiry_for",
+            return_value="31-12-2026",
+        ):
+            data = get_ecf_print_data(self.si.name)
 
         self.assertEqual(data.log_name, log.name)
         self.assertEqual(data.encf, "E320000088888")
         self.assertEqual(data.qr_url, "https://example.invalid/verify")
         self.assertEqual(data.title, "Electronic Consumer Invoice")
-        self.assertEqual(data.payment_due, frappe.utils.formatdate(self.si.due_date, "dd-mm-yyyy"))
+        self.assertEqual(data.sequence_expiry, "31-12-2026")
+        self.assertNotIn("payment_due", data)
         self.assertEqual(data.lines[0].tax, 180)
         self.assertEqual(data.grand_total, 1180)
 
@@ -129,6 +139,27 @@ class TestPrinting(FrappeTestCase):
         data_uri = qr_svg_data_uri("https://example.invalid/verify")
         self.assertTrue(data_uri.startswith("data:image/svg+xml;base64,"))
         self.assertEqual(qr_svg_data_uri(None), "")
+
+    def test_sequence_expiry_comes_from_the_range_containing_the_encf(self):
+        with patch.object(
+            frappe.db,
+            "get_value",
+            side_effect=["TesteCF", "2026-12-31"],
+        ) as get_value:
+            expiry = _sequence_expiry_for(COMPANY, "32", "E320000088888")
+
+        self.assertEqual(expiry, "31-12-2026")
+        get_value.assert_any_call(
+            "ECF Sequence Range",
+            {
+                "company": COMPANY,
+                "environment": "TesteCF",
+                "ecf_type": "32",
+                "sequence_from": ["<=", 88888],
+                "sequence_to": [">=", 88888],
+            },
+            "expiry_date",
+        )
 
     def test_dominican_company_forces_spanish_print_language(self):
         doc = frappe._dict(company=COMPANY, language="en")
@@ -140,6 +171,29 @@ class TestPrinting(FrappeTestCase):
         with patch.object(frappe.db, "get_value", return_value="France"):
             set_print_language(doc)
         self.assertEqual(doc.language, "fr")
+
+
+class TestReadiness(FrappeTestCase):
+    def test_submit_error_lists_each_missing_field(self):
+        problems = {
+            "ready": False,
+            "ecf_type": "32",
+            "missing": [
+                {"section": "Company", "label": "RNC/Tax ID", "reason": "Invalid RNC."},
+                {"section": "Fiscal Data", "label": "Fiscal Address", "reason": "Missing address."},
+            ],
+        }
+        invoice = frappe._dict(company=COMPANY)
+        with (
+            patch.object(frappe.db, "exists", return_value="Condo ECF Settings"),
+            patch("dgii_ecf.readiness.pick_ecf_type", return_value="32"),
+            patch("dgii_ecf.readiness.get_ecf_readiness", return_value=problems),
+        ):
+            with self.assertRaises(frappe.ValidationError) as exc:
+                validate_sales_invoice_readiness(invoice)
+
+        self.assertIn("RNC/Tax ID", str(exc.exception))
+        self.assertIn("Fiscal Address", str(exc.exception))
 
 
 class TestMSellerProviderMapping(FrappeTestCase):
