@@ -22,6 +22,18 @@ def is_configured(company: str) -> bool:
     )
 
 
+def set_print_language(doc, method=None):
+    """DGII representations are issued in Spanish for Dominican companies.
+
+    Outside the Dominican Republic ERPNext keeps its native behavior: Sales
+    Invoice language is fetched from the Customer, which is preferable to
+    guessing a language from a potentially multilingual country.
+    """
+    country = frappe.db.get_value("Company", doc.company, "country")
+    if country == "Dominican Republic":
+        doc.language = "es"
+
+
 def on_submit(doc, method=None):
     """Queue the e-CF submission off the invoice's critical path.
 

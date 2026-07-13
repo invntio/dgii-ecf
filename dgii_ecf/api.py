@@ -64,6 +64,8 @@ def submit_sales_invoice(sales_invoice: str) -> dict:
         return frappe.get_doc("ECF Document Log", existing).as_dict()
 
     si = frappe.get_doc("Sales Invoice", sales_invoice)
+    from dgii_ecf.readiness import validate_sales_invoice_readiness
+    validate_sales_invoice_readiness(si)
     ecf_type = pick_ecf_type(si)
     environment = _company_environment(si.company)
 

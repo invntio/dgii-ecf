@@ -7,8 +7,16 @@ from unittest.mock import MagicMock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from dgii_ecf.events.sales_invoice import set_print_language
+from dgii_ecf.printing import (
+    _sequence_expiry_for,
+    get_ecf_print_data,
+    qr_svg_data_uri,
+)
 from dgii_ecf.providers.base import EcfResult
 from dgii_ecf.providers.mseller import MSellerProvider
+from dgii_ecf.readiness import validate_sales_invoice_readiness
+from dgii_ecf.mseller.client import MSellerError
 from dgii_ecf.dgii_ecf.doctype.ecf_sequence_range.ecf_sequence_range import (
     get_next_encf,
 )
@@ -63,6 +71,131 @@ def _fake_settings():
     return s
 
 
+class TestPrinting(FrappeTestCase):
+    def setUp(self):
+        frappe.set_user("Administrator")
+        self.si = _ensure_test_invoice()
+        frappe.db.delete("ECF Document Log", {"sales_invoice": self.si.name})
+
+    def tearDown(self):
+        frappe.db.delete("ECF Document Log", {"sales_invoice": self.si.name})
+
+    def test_print_data_comes_from_document_log(self):
+        log = frappe.get_doc({
+            "doctype": "ECF Document Log",
+            "company": COMPANY,
+            "sales_invoice": self.si.name,
+            "ecf_type": "32",
+            "encf": "E320000088888",
+            "status": "Aceptado",
+            "security_code": "ABC123",
+            "qr_url": "https://example.invalid/verify",
+            "request_json": frappe.as_json({
+                "ECF": {
+                    "Encabezado": {
+                        "IdDoc": {"TipoeCF": "32", "eNCF": "E320000088888"},
+                        "Emisor": {
+                            "RNCEmisor": "102320705",
+                            "RazonSocialEmisor": COMPANY,
+                            "FechaEmision": "13-07-2026",
+                        },
+                        "Comprador": {
+                            "RNCComprador": "130123456",
+                            "RazonSocialComprador": "ECF Test Customer",
+                        },
+                        "Totales": {
+                            "MontoGravadoTotal": 1000,
+                            "TotalITBIS": 180,
+                            "MontoTotal": 1180,
+                        },
+                    },
+                    "DetallesItems": {"Item": [{
+                        "CantidadItem": 1,
+                        "NombreItem": "ECF Test Service",
+                        "PrecioUnitarioItem": 1000,
+                        "MontoItem": 1000,
+                        "IndicadorFacturacion": 1,
+                    }]},
+                }
+            }),
+        }).insert(ignore_permissions=True)
+
+        with patch(
+            "dgii_ecf.printing._sequence_expiry_for",
+            return_value="31-12-2026",
+        ):
+            data = get_ecf_print_data(self.si.name)
+
+        self.assertEqual(data.log_name, log.name)
+        self.assertEqual(data.encf, "E320000088888")
+        self.assertEqual(data.qr_url, "https://example.invalid/verify")
+        self.assertEqual(data.title, "Electronic Consumer Invoice")
+        self.assertEqual(data.sequence_expiry, "31-12-2026")
+        self.assertNotIn("payment_due", data)
+        self.assertEqual(data.lines[0].tax, 180)
+        self.assertEqual(data.grand_total, 1180)
+
+    def test_qr_is_an_inline_svg_data_uri(self):
+        data_uri = qr_svg_data_uri("https://example.invalid/verify")
+        self.assertTrue(data_uri.startswith("data:image/svg+xml;base64,"))
+        self.assertEqual(qr_svg_data_uri(None), "")
+
+    def test_sequence_expiry_comes_from_the_range_containing_the_encf(self):
+        with patch.object(
+            frappe.db,
+            "get_value",
+            side_effect=["TesteCF", "2026-12-31"],
+        ) as get_value:
+            expiry = _sequence_expiry_for(COMPANY, "32", "E320000088888")
+
+        self.assertEqual(expiry, "31-12-2026")
+        get_value.assert_any_call(
+            "ECF Sequence Range",
+            {
+                "company": COMPANY,
+                "environment": "TesteCF",
+                "ecf_type": "32",
+                "sequence_from": ["<=", 88888],
+                "sequence_to": [">=", 88888],
+            },
+            "expiry_date",
+        )
+
+    def test_dominican_company_forces_spanish_print_language(self):
+        doc = frappe._dict(company=COMPANY, language="en")
+        set_print_language(doc)
+        self.assertEqual(doc.language, "es")
+
+    def test_other_countries_keep_invoice_language(self):
+        doc = frappe._dict(company="Foreign Company", language="fr")
+        with patch.object(frappe.db, "get_value", return_value="France"):
+            set_print_language(doc)
+        self.assertEqual(doc.language, "fr")
+
+
+class TestReadiness(FrappeTestCase):
+    def test_submit_error_lists_each_missing_field(self):
+        problems = {
+            "ready": False,
+            "ecf_type": "32",
+            "missing": [
+                {"section": "Company", "label": "RNC/Tax ID", "reason": "Invalid RNC."},
+                {"section": "Fiscal Data", "label": "Fiscal Address", "reason": "Missing address."},
+            ],
+        }
+        invoice = frappe._dict(company=COMPANY)
+        with (
+            patch.object(frappe.db, "exists", return_value="Condo ECF Settings"),
+            patch("dgii_ecf.readiness.pick_ecf_type", return_value="32"),
+            patch("dgii_ecf.readiness.get_ecf_readiness", return_value=problems),
+        ):
+            with self.assertRaises(frappe.ValidationError) as exc:
+                validate_sales_invoice_readiness(invoice)
+
+        self.assertIn("RNC/Tax ID", str(exc.exception))
+        self.assertIn("Fiscal Address", str(exc.exception))
+
+
 class TestMSellerProviderMapping(FrappeTestCase):
     """MSeller JSON -> normalized EcfResult (the swap-layer contract)."""
 
@@ -95,6 +228,18 @@ class TestMSellerProviderMapping(FrappeTestCase):
             res = provider.send({"ECF": {}}, validate=True)
         self.assertFalse(res.success)
         self.assertIn("MontoTotal", res.error)
+
+    def test_send_validate_rejects_submission_receipt(self):
+        provider = MSellerProvider(_fake_settings())
+        with patch.object(MSellerProvider, "_client") as client:
+            client.return_value.send_document.return_value = {
+                "ecf": "E320000000000",
+                "internalTrackId": "uuid-unexpected",
+                "securityCode": "ABC123",
+                "qr_url": "https://example.invalid/qr",
+            }
+            with self.assertRaisesRegex(MSellerError, "ignored validate=true"):
+                provider.send({"ECF": {}}, validate=True)
 
     def test_batch_maps_found_and_missing(self):
         provider = MSellerProvider(_fake_settings())
