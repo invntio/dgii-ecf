@@ -20,6 +20,7 @@ fixtures = [
 jinja = {
     "methods": [
         "dgii_ecf.printing.get_ecf_print_data",
+        "dgii_ecf.printing.get_billing_property_print_data",
         "dgii_ecf.printing.qr_svg_data_uri",
     ]
 }
@@ -37,7 +38,10 @@ doc_events = {
 
 scheduler_events = {
     "cron": {
-        "*/15 * * * *": ["dgii_ecf.tasks.poll_pending_documents"],
+        "*/15 * * * *": [
+            "dgii_ecf.tasks.poll_pending_documents",
+            "dgii_ecf.tasks.retry_failed_documents",
+        ],
     },
     "daily": ["dgii_ecf.tasks.expire_ranges"],
 }
@@ -45,6 +49,3 @@ scheduler_events = {
 override_doctype_dashboards = {
     "Sales Invoice": "dgii_ecf.dashboard.sales_invoice_dashboard",
 }
-
-# Extension points consumed by the builder (see README):
-# ecf_debit_note_flags / ecf_source_invoice_fields — other apps append here.

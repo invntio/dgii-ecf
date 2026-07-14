@@ -10,6 +10,7 @@ from frappe.tests.utils import FrappeTestCase
 from dgii_ecf.events.sales_invoice import set_print_language
 from dgii_ecf.printing import (
     _sequence_expiry_for,
+    get_billing_property_print_data,
     get_ecf_print_data,
     qr_svg_data_uri,
 )
@@ -140,6 +141,33 @@ class TestPrinting(FrappeTestCase):
         self.assertTrue(data_uri.startswith("data:image/svg+xml;base64,"))
         self.assertEqual(qr_svg_data_uri(None), "")
 
+    def test_billing_property_is_optional_without_bohio_custom_field(self):
+        meta = MagicMock()
+        meta.has_field.return_value = False
+        with patch.object(frappe, "get_meta", return_value=meta):
+            self.assertIsNone(get_billing_property_print_data(self.si.name))
+
+    def test_billing_property_uses_unit_and_invoice_company(self):
+        invoice = frappe._dict(
+            company=COMPANY,
+            bohio_billing_unit="UT-ECF-TEST-A-101",
+        )
+        meta = MagicMock()
+        meta.has_field.return_value = True
+        company = frappe._dict(company_name="Condominio Elegante")
+        unit = frappe._dict(unit_number="A-101", company=COMPANY)
+        with (
+            patch.object(frappe, "get_doc", return_value=invoice),
+            patch.object(frappe, "get_meta", return_value=meta),
+            patch.object(frappe.db, "exists", return_value=True),
+            patch.object(frappe.db, "get_value", return_value=unit),
+            patch.object(frappe, "get_cached_doc", return_value=company),
+        ):
+            data = get_billing_property_print_data("SINV-TEST")
+
+        self.assertEqual(data.unit_number, "A-101")
+        self.assertEqual(data.condominium_name, "Condominio Elegante")
+
     def test_sequence_expiry_comes_from_the_range_containing_the_encf(self):
         with patch.object(
             frappe.db,
@@ -185,6 +213,7 @@ class TestReadiness(FrappeTestCase):
         }
         invoice = frappe._dict(company=COMPANY)
         with (
+            patch("dgii_ecf.readiness.is_enabled", return_value=True),
             patch.object(frappe.db, "exists", return_value="Condo ECF Settings"),
             patch("dgii_ecf.readiness.pick_ecf_type", return_value="32"),
             patch("dgii_ecf.readiness.get_ecf_readiness", return_value=problems),
@@ -194,6 +223,16 @@ class TestReadiness(FrappeTestCase):
 
         self.assertIn("RNC/Tax ID", str(exc.exception))
         self.assertIn("Fiscal Address", str(exc.exception))
+
+    def test_submit_readiness_is_inert_when_site_feature_is_disabled(self):
+        invoice = frappe._dict(company=COMPANY)
+        with (
+            patch("dgii_ecf.readiness.is_enabled", return_value=False),
+            patch.object(frappe.db, "exists") as exists,
+        ):
+            validate_sales_invoice_readiness(invoice)
+
+        exists.assert_not_called()
 
 
 class TestMSellerProviderMapping(FrappeTestCase):
@@ -257,6 +296,28 @@ class TestMSellerProviderMapping(FrappeTestCase):
         self.assertTrue(out[0].success)
         self.assertFalse(out[1].success)
 
+    def test_status_error_is_normalized_for_retry(self):
+        provider = MSellerProvider(_fake_settings())
+        with patch.object(MSellerProvider, "_client") as client:
+            client.return_value.get_document.return_value = {
+                "ncf": "E310000000102",
+                "status": "Error",
+            }
+            res = provider.get_status("E310000000102")
+
+        self.assertEqual(res.status, "ERROR")
+
+    def test_queued_status_is_normalized_for_polling(self):
+        provider = MSellerProvider(_fake_settings())
+        with patch.object(MSellerProvider, "_client") as client:
+            client.return_value.get_document.return_value = {
+                "ncf": "E310000000102",
+                "status": "En Cola",
+            }
+            res = provider.get_status("E310000000102")
+
+        self.assertEqual(res.status, "PROCESANDO")
+
 
 class TestSequenceHandout(FrappeTestCase):
     """get_next_encf: format, monotonicity, exhaustion, no duplicates."""
@@ -319,10 +380,34 @@ class TestBuilder(FrappeTestCase):
         from dgii_ecf.ecf.builder import build_ecf_json
 
         expiry = frappe.utils.add_days(frappe.utils.today(), 200)
-        doc = build_ecf_json(self.si, "E310000000001", "31", sequence_expiry=expiry)
+        with patch(
+            "dgii_ecf.ecf.builder._primary_address",
+            return_value="Calle Primera #01",
+        ):
+            doc = build_ecf_json(
+                self.si, "E310000000001", "31", sequence_expiry=expiry
+            )
         id_doc = doc["ECF"]["Encabezado"]["IdDoc"]
+        id_fields = list(id_doc)
+        self.assertLess(
+            id_fields.index("eNCF"), id_fields.index("FechaVencimientoSecuencia")
+        )
+        self.assertLess(
+            id_fields.index("FechaVencimientoSecuencia"),
+            id_fields.index("IndicadorMontoGravado"),
+        )
+        self.assertLess(id_fields.index("TipoPago"), id_fields.index("TotalPaginas"))
+        issuer_fields = list(doc["ECF"]["Encabezado"]["Emisor"])
+        self.assertLess(
+            issuer_fields.index("DireccionEmisor"),
+            issuer_fields.index("FechaEmision"),
+        )
         self.assertIn("FechaVencimientoSecuencia", id_doc)
         self.assertIn("Paginacion", doc["ECF"])
+        self.assertLess(
+            list(doc["ECF"]).index("Paginacion"),
+            list(doc["ECF"]).index("FechaHoraFirma"),
+        )
         # Credit sale (due_date > posting_date) must carry TipoPago=2 + deadline.
         if frappe.utils.getdate(self.si.due_date) > frappe.utils.getdate(self.si.posting_date):
             self.assertEqual(id_doc["TipoPago"], "2")
@@ -409,18 +494,13 @@ class TestFiscalHardening(FrappeTestCase):
         self.assertEqual(_money(2.675), 2.68)   # float repr trap: round() gives 2.67
         self.assertEqual(_money(None), 0.0)
 
-    def test_pick_type_cleans_buyer_rnc(self):
+    def test_pick_type_uses_explicit_invoice_preference(self):
         from dgii_ecf.ecf.builder import pick_ecf_type
 
-        original = frappe.db.get_value("Customer", self.si.customer, "tax_id")
-        try:
-            frappe.db.set_value("Customer", self.si.customer, "tax_id", "1-02-32070-5")
-            self.assertEqual(pick_ecf_type(self.si), "31")
-            # Junk like N/A carries no digits -> consumer invoice, not a bogus 31.
-            frappe.db.set_value("Customer", self.si.customer, "tax_id", "N/A")
-            self.assertEqual(pick_ecf_type(self.si), "32")
-        finally:
-            frappe.db.set_value("Customer", self.si.customer, "tax_id", original)
+        self.si.dgii_ecf_requires_fiscal_credit = 0
+        self.assertEqual(pick_ecf_type(self.si), "32")
+        self.si.dgii_ecf_requires_fiscal_credit = 1
+        self.assertEqual(pick_ecf_type(self.si), "31")
 
     def test_comprador_rnc_is_bare_digits(self):
         from dgii_ecf.ecf.builder import _comprador

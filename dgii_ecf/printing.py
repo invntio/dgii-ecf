@@ -45,6 +45,36 @@ def _company_address(company: str) -> str | None:
     return ", ".join(part for part in parts if part)
 
 
+def get_billing_property_print_data(sales_invoice: str) -> frappe._dict | None:
+    """Return Bohío's condominium/unit label when that integration is installed.
+
+    ``dgii_ecf`` remains usable without Bohío Core: both the custom Sales Invoice
+    field and the Unit DocType are detected at runtime.  The condominium's fiscal
+    address is intentionally not returned here because it is already printed in
+    the issuer header; repeating it in the buyer block could imply that it is the
+    buyer's fiscal address.
+    """
+    invoice = frappe.get_doc("Sales Invoice", sales_invoice)
+    if not frappe.get_meta("Sales Invoice").has_field("bohio_billing_unit"):
+        return None
+
+    unit_name = invoice.get("bohio_billing_unit")
+    if not unit_name or not frappe.db.exists("DocType", "Unit"):
+        return None
+
+    unit = frappe.db.get_value(
+        "Unit", unit_name, ["unit_number", "company"], as_dict=True
+    )
+    if not unit or not unit.unit_number or unit.company != invoice.company:
+        return None
+
+    company = frappe.get_cached_doc("Company", invoice.company)
+    return frappe._dict(
+        unit_number=unit.unit_number,
+        condominium_name=company.company_name or invoice.company,
+    )
+
+
 def _sequence_expiry_for(company: str, ecf_type: str, encf: str) -> str | None:
     """Return the expiry of the authorized range containing ``encf``.
 
@@ -86,7 +116,11 @@ def get_ecf_print_data(sales_invoice: str) -> frappe._dict | None:
     """
     rows = frappe.get_all(
         "ECF Document Log",
-        filters={"sales_invoice": sales_invoice},
+        filters={
+            "direction": "Issued",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": sales_invoice,
+        },
         fields=[
             "name",
             "encf",

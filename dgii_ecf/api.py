@@ -18,7 +18,12 @@ _LIVE_STATUSES = ("Pending", "RECIBIDO", "PROCESANDO", "Aceptado", "Aceptado Con
 def _existing_live_log(sales_invoice: str) -> str | None:
     return frappe.db.exists(
         "ECF Document Log",
-        {"sales_invoice": sales_invoice, "status": ["in", _LIVE_STATUSES]},
+        {
+            "direction": "Issued",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": sales_invoice,
+            "status": ["in", _LIVE_STATUSES],
+        },
     )
 
 
@@ -73,7 +78,13 @@ def submit_sales_invoice(sales_invoice: str) -> dict:
     # document, so it must reuse the number — allocating a fresh one would burn
     # an authorized sequence per retry (and MSeller may already hold the first).
     retry_log = frappe.db.exists(
-        "ECF Document Log", {"sales_invoice": sales_invoice, "status": "ERROR"}
+        "ECF Document Log",
+        {
+            "direction": "Issued",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": sales_invoice,
+            "status": "ERROR",
+        },
     )
     if retry_log:
         log = frappe.get_doc("ECF Document Log", retry_log)
@@ -99,7 +110,10 @@ def submit_sales_invoice(sales_invoice: str) -> dict:
             {
                 "doctype": "ECF Document Log",
                 "company": si.company,
-                "sales_invoice": si.name,
+                "direction": "Issued",
+                "reference_doctype": "Sales Invoice",
+                "reference_name": si.name,
+                "modified_ecf_document": _modified_ecf_document(si, ecf_type),
                 "ecf_type": ecf_type,
                 "encf": encf,
                 "status": "Pending",
@@ -125,6 +139,69 @@ def submit_sales_invoice(sales_invoice: str) -> dict:
     log.db_set("error", res.error)
     frappe.db.commit()
     return log.as_dict()
+
+
+@frappe.whitelist()
+def get_sales_invoice_ecf_state(sales_invoice: str) -> dict:
+    """Return the small amount of state needed by the Sales Invoice form."""
+    si = frappe.get_doc("Sales Invoice", sales_invoice)
+    if not frappe.has_permission("Sales Invoice", "read", doc=si, throw=False):
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+    from dgii_ecf.events.sales_invoice import is_configured
+
+    if si.docstatus != 1 or not is_configured(si.company):
+        return {"can_retry": False}
+
+    log = frappe.db.get_value(
+        "ECF Document Log",
+        {
+            "direction": "Issued",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": si.name,
+        },
+        ["name", "status", "encf", "error"],
+        as_dict=True,
+    )
+    return {
+        "can_retry": not log or log.status == "ERROR",
+        "log": log,
+    }
+
+
+@frappe.whitelist()
+def retry_sales_invoice(sales_invoice: str) -> dict:
+    """Safely requeue e-CF creation for a submitted invoice.
+
+    The worker itself is idempotent. ``deduplicate`` also prevents two rapid
+    button clicks from running concurrent jobs before the first log exists.
+    """
+    si = frappe.get_doc("Sales Invoice", sales_invoice)
+    if not frappe.has_permission("Sales Invoice", "submit", doc=si, throw=False):
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    if si.docstatus != 1:
+        frappe.throw(_("Only submitted invoices can be sent as e-CF."))
+
+    require_enabled()
+    from dgii_ecf.events.sales_invoice import is_configured
+
+    if not is_configured(si.company):
+        frappe.throw(_("Electronic invoicing is disabled for this company."))
+
+    # Fail in the user's request with an actionable readiness message instead
+    # of queueing a job that is guaranteed to fail invisibly in the worker.
+    from dgii_ecf.readiness import validate_sales_invoice_readiness
+
+    validate_sales_invoice_readiness(si)
+
+    frappe.enqueue(
+        "dgii_ecf.api.submit_sales_invoice",
+        queue="long",
+        job_id=f"ecf-submit-{si.name}",
+        deduplicate=True,
+        sales_invoice=si.name,
+    )
+    return {"queued": True}
 
 
 @frappe.whitelist()
@@ -163,3 +240,21 @@ def query_status(encf: str) -> dict:
         log.db_set("response_json", frappe.as_json(res.raw))
         frappe.db.commit()
     return log.as_dict()
+
+
+def _modified_ecf_document(si, ecf_type: str) -> str | None:
+    if ecf_type not in ("33", "34") or not si.return_against:
+        return None
+    rows = frappe.get_all(
+        "ECF Document Log",
+        filters={
+            "direction": "Issued",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": si.return_against,
+            "encf": ["is", "set"],
+        },
+        pluck="name",
+        order_by="creation desc",
+        limit=1,
+    )
+    return rows[0] if rows else None

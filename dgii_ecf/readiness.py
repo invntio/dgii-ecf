@@ -8,6 +8,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, today
 
+from dgii_ecf.config import is_enabled
 from dgii_ecf.ecf.builder import pick_ecf_type
 
 
@@ -27,6 +28,20 @@ def _company_address(company: str) -> str | None:
         {"link_doctype": "Company", "link_name": company, "parenttype": "Address"},
         "parent",
     )
+
+
+def _add_buyer_requirements(result: dict, invoice) -> dict:
+    """E31 requires an identified buyer; E32 may remain consumer-facing."""
+    if result["ecf_type"] != "31":
+        return result
+    buyer_id = re.sub(r"\D", "", invoice.get("tax_id") or "")
+    if len(buyer_id) not in (9, 11):
+        result["missing"].append(_missing(
+            "buyer_tax_id_invalid", "Customer", "tax_id", "RNC/Tax ID",
+            "A fiscal credit receipt requires a buyer RNC or ID with 9 or 11 digits.",
+        ))
+        result["ready"] = False
+    return result
 
 
 def get_ecf_readiness(company: str, ecf_type: str) -> dict:
@@ -119,15 +134,23 @@ def sales_invoice_readiness(sales_invoice: str) -> dict:
     invoice = frappe.get_doc("Sales Invoice", sales_invoice)
     if not frappe.has_permission("Sales Invoice", "read", doc=invoice, throw=False):
         frappe.throw(_("Not permitted"), frappe.PermissionError)
-    return get_ecf_readiness(invoice.company, pick_ecf_type(invoice))
+    return _add_buyer_requirements(
+        get_ecf_readiness(invoice.company, pick_ecf_type(invoice)), invoice
+    )
 
 
 def validate_sales_invoice_readiness(doc, method=None) -> None:
     """Block submit with one actionable message containing every missing field."""
+    # Match the on-submit feature gate. If e-CF is disabled for the site, the
+    # integration must neither block the draft nor silently skip after blocking.
+    if not is_enabled():
+        return
     settings = frappe.db.exists("ECF Provider Settings", {"company": doc.company, "enabled": 1})
     if not settings:
         return
-    result = get_ecf_readiness(doc.company, pick_ecf_type(doc))
+    result = _add_buyer_requirements(
+        get_ecf_readiness(doc.company, pick_ecf_type(doc)), doc
+    )
     if result["ready"]:
         return
     items = "".join(

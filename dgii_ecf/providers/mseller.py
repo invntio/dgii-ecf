@@ -23,6 +23,21 @@ from .base import EcfProvider, EcfResult
 _TOKEN_TTL_SECONDS = 45 * 60
 
 
+def _normalize_status(status: str | None) -> str | None:
+    """Map gateway spelling/casing to values used by ECF Document Log."""
+    if not status:
+        return status
+    return {
+        "error": "ERROR",
+        "en cola": "PROCESANDO",
+        "recibido": "RECIBIDO",
+        "procesando": "PROCESANDO",
+        "aceptado": "Aceptado",
+        "aceptado condicional": "Aceptado Condicional",
+        "rechazado": "Rechazado",
+    }.get(status.casefold(), status)
+
+
 class MSellerProvider(EcfProvider):
     def __init__(self, settings):
         super().__init__(settings)
@@ -104,7 +119,7 @@ class MSellerProvider(EcfProvider):
             self._persist_token()
         return EcfResult(
             success=True,
-            status=r.get("status"),
+            status=_normalize_status(r.get("status")),
             encf=r.get("ncf") or encf,
             track_id=r.get("internalTrackId"),
             security_code=r.get("securityCode"),
@@ -123,7 +138,7 @@ class MSellerProvider(EcfProvider):
             out.append(
                 EcfResult(
                     success=bool(item.get("found")),
-                    status=item.get("status") or d.get("status"),
+                    status=_normalize_status(item.get("status") or d.get("status")),
                     encf=item.get("ecf") or d.get("ncf"),
                     track_id=d.get("internalTrackId"),
                     security_code=d.get("securityCode"),

@@ -54,14 +54,16 @@ def _ddmmyyyy(value) -> str | None:
 
 
 def pick_ecf_type(si) -> str:
-    """RNC-bearing buyer -> 31, else 32. Debit note (mora) -> 33, credit note -> 34."""
-    debit_flags = ["is_debit_note"] + (frappe.get_hooks("ecf_debit_note_flags") or [])
-    if any(si.get(f) for f in debit_flags):
+    """Use the invoice's explicit fiscal intent; identification alone is not intent."""
+    if si.get("is_debit_note"):
         return TYPE_NOTA_DEBITO
     if si.get("is_return"):
         return TYPE_NOTA_CREDITO
-    buyer_rnc = _digits(frappe.db.get_value("Customer", si.customer, "tax_id"))
-    return TYPE_CREDITO_FISCAL if buyer_rnc else TYPE_CONSUMO
+    return (
+        TYPE_CREDITO_FISCAL
+        if si.get("dgii_ecf_requires_fiscal_credit")
+        else TYPE_CONSUMO
+    )
 
 
 def _item_is_taxable(item) -> bool:
@@ -92,11 +94,13 @@ def _emisor(company: str) -> dict:
     emisor = {
         "RNCEmisor": _digits(c.tax_id),
         "RazonSocialEmisor": c.company_name,
-        "FechaEmision": _ddmmyyyy(frappe.utils.nowdate()),
     }
     address = _primary_address(company)
     if address:
         emisor["DireccionEmisor"] = address
+    # DGII's XSD is sequence-sensitive: FechaEmision comes after all optional
+    # issuer identity/address fields, including DireccionEmisor.
+    emisor["FechaEmision"] = _ddmmyyyy(frappe.utils.nowdate())
     return emisor
 
 
@@ -164,21 +168,32 @@ def _is_service(item_code: str) -> bool:
 
 def _reference_section(si) -> dict:
     """InformacionReferencia for notas (33/34): point at the modified e-CF."""
-    source_fields = (frappe.get_hooks("ecf_source_invoice_fields") or []) + ["return_against"]
-    source = next((si.get(f) for f in source_fields if si.get(f)), None)
+    source = si.get("return_against")
     if not source:
         frappe.throw(
             _(
                 "A debit/credit note e-CF must reference the original invoice "
-                "(no source invoice field is set)."
+                "(Return Against is not set)."
             )
         )
-    modified_encf = frappe.db.get_value(
-        "ECF Document Log", {"sales_invoice": source}, "encf"
+    rows = frappe.get_all(
+        "ECF Document Log",
+        filters={
+            "direction": "Issued",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": source,
+            "encf": ["is", "set"],
+        },
+        fields=["name", "encf"],
+        order_by="creation desc",
+        limit=1,
     )
-    if not modified_encf:
+    if not rows:
         frappe.throw(_("No e-CF found for the referenced invoice {0}.").format(source))
-    ref = {"NCFModificado": modified_encf, "FechaNCFModificado": _ddmmyyyy(si.posting_date)}
+    ref = {
+        "NCFModificado": rows[0].encf,
+        "FechaNCFModificado": _ddmmyyyy(si.posting_date),
+    }
     return ref
 
 
@@ -199,11 +214,17 @@ def build_ecf_json(si, encf: str, ecf_type: str, sequence_expiry=None) -> dict:
     id_doc = {
         "TipoeCF": ecf_type,
         "eNCF": encf,
-        "IndicadorMontoGravado": "1" if totales["MontoGravadoTotal"] else "0",
-        "TipoIngresos": "01",
-        "TipoPago": "2" if is_credit else "1",
-        "TotalPaginas": "1",
     }
+    # IdDoc is an XSD sequence, not an unordered bag of fields. Insert each
+    # conditional value at its schema position instead of appending it later.
+    if ecf_type == TYPE_CREDITO_FISCAL and sequence_expiry:
+        id_doc["FechaVencimientoSecuencia"] = _ddmmyyyy(sequence_expiry)
+    id_doc["IndicadorMontoGravado"] = "1" if totales["MontoGravadoTotal"] else "0"
+    id_doc["TipoIngresos"] = "01"
+    id_doc["TipoPago"] = "2" if is_credit else "1"
+    if ecf_type == TYPE_CREDITO_FISCAL and is_credit:
+        id_doc["FechaLimitePago"] = _ddmmyyyy(si.due_date)
+    id_doc["TotalPaginas"] = "1"
 
     encabezado = {
         "Version": "1.0",
@@ -216,16 +237,9 @@ def build_ecf_json(si, encf: str, ecf_type: str, sequence_expiry=None) -> dict:
     ecf: dict = {
         "Encabezado": encabezado,
         "DetallesItems": {"Item": items},
-        "FechaHoraFirma": frappe.utils.now_datetime().strftime("%d-%m-%Y %H:%M:%S"),
     }
 
     if ecf_type == TYPE_CREDITO_FISCAL:
-        # DGII requires the sequence expiry and, on credit sales, the payment
-        # deadline — both only on type 31.
-        if sequence_expiry:
-            id_doc["FechaVencimientoSecuencia"] = _ddmmyyyy(sequence_expiry)
-        if is_credit:
-            id_doc["FechaLimitePago"] = _ddmmyyyy(si.due_date)
         ecf["Paginacion"] = {"Pagina": [_single_page(items, totales)]}
     elif ecf_type in (TYPE_NOTA_DEBITO, TYPE_NOTA_CREDITO):
         ecf["InformacionReferencia"] = _reference_section(si)
@@ -236,6 +250,9 @@ def build_ecf_json(si, encf: str, ecf_type: str, sequence_expiry=None) -> dict:
             f"e-CF type {ecf_type} is not implemented in the builder yet "
             "(only 31, 32, 33, 34). See ecf-document-format.md for its sections."
         )
+
+    # The signature timestamp is the final e-CF element in the DGII schema.
+    ecf["FechaHoraFirma"] = frappe.utils.now_datetime().strftime("%d-%m-%Y %H:%M:%S")
 
     return {"ECF": ecf}
 

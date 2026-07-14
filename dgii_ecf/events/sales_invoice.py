@@ -45,6 +45,7 @@ def on_submit(doc, method=None):
         "dgii_ecf.api.submit_sales_invoice",
         queue="long",
         job_id=f"ecf-submit-{doc.name}",
+        deduplicate=True,
         sales_invoice=doc.name,
         enqueue_after_commit=True,
     )
@@ -55,7 +56,12 @@ def on_cancel(doc, method=None):
     The correction instrument is an electronic credit note (type 34)."""
     encf = frappe.db.get_value(
         "ECF Document Log",
-        {"sales_invoice": doc.name, "status": ["in", _ECF_BLOCKING_STATUSES]},
+        {
+            "direction": "Issued",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": doc.name,
+            "status": ["in", _ECF_BLOCKING_STATUSES],
+        },
         "encf",
     )
     if encf:

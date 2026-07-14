@@ -60,12 +60,35 @@ def poll_pending_documents():
     frappe.db.commit()
 
 
+def retry_failed_documents():
+    """Requeue transiently failed sends; the worker reuses the original eNCF."""
+    if not is_enabled():
+        return
+    for sales_invoice in frappe.get_all(
+        "ECF Document Log",
+        filters={
+            "status": "ERROR",
+            "direction": "Issued",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": ["is", "set"],
+        },
+        pluck="reference_name",
+    ):
+        frappe.enqueue(
+            "dgii_ecf.api.submit_sales_invoice",
+            queue="long",
+            job_id=f"ecf-submit-{sales_invoice}",
+            deduplicate=True,
+            sales_invoice=sales_invoice,
+        )
+
+
 def _notify_rejection(log_name: str):
     """Surface a DGII rejection to the invoice owner (best-practices)."""
     log = frappe.get_doc("ECF Document Log", log_name)
-    if not log.sales_invoice:
+    if log.reference_doctype != "Sales Invoice" or not log.reference_name:
         return
-    owner = frappe.db.get_value("Sales Invoice", log.sales_invoice, "owner")
+    owner = frappe.db.get_value("Sales Invoice", log.reference_name, "owner")
     if not owner:
         return
     frappe.get_doc(
@@ -74,7 +97,7 @@ def _notify_rejection(log_name: str):
             "for_user": owner,
             "type": "Alert",
             "document_type": "Sales Invoice",
-            "document_name": log.sales_invoice,
+            "document_name": log.reference_name,
             "subject": _("e-CF {0} rejected by DGII").format(log.encf),
         }
     ).insert(ignore_permissions=True)

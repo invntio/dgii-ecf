@@ -7,11 +7,20 @@
  "engine": "InnoDB",
  "field_order": [
   "company",
-  "sales_invoice",
+  "direction",
   "ecf_type",
   "column_break_head",
   "encf",
   "status",
+  "document_reference_section",
+  "reference_doctype",
+  "reference_name",
+  "column_break_document_reference",
+  "modified_ecf_document",
+  "tax_identification_section",
+  "issuer_tax_id",
+  "column_break_tax_identification",
+  "receiver_tax_id",
   "reference_section",
   "internal_track_id",
   "security_code",
@@ -34,17 +43,20 @@
    "reqd": 1
   },
   {
-   "fieldname": "sales_invoice",
-   "fieldtype": "Link",
+   "default": "Issued",
+   "fieldname": "direction",
+   "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Sales Invoice",
-   "options": "Sales Invoice"
+   "label": "Direction",
+   "options": "Issued\nReceived",
+   "reqd": 1
   },
   {
    "fieldname": "ecf_type",
    "fieldtype": "Data",
-   "label": "e-CF Type"
+   "label": "e-CF Type",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_head",
@@ -55,7 +67,7 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "eNCF",
-   "unique": 1
+   "reqd": 1
   },
   {
    "default": "Pending",
@@ -66,6 +78,57 @@
    "label": "Status",
    "options": "Pending\nRECIBIDO\nPROCESANDO\nAceptado\nAceptado Condicional\nRechazado\nERROR",
    "search_index": 1
+  },
+  {
+   "fieldname": "document_reference_section",
+   "fieldtype": "Section Break",
+   "label": "Referenced Document"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Reference DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Reference Document",
+   "options": "reference_doctype",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_document_reference",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "modified_ecf_document",
+   "fieldtype": "Link",
+   "label": "Modified e-CF Document",
+   "options": "ECF Document Log"
+  },
+  {
+   "fieldname": "tax_identification_section",
+   "fieldtype": "Section Break",
+   "label": "Tax Identification"
+  },
+  {
+   "fieldname": "issuer_tax_id",
+   "fieldtype": "Data",
+   "label": "Issuer Tax ID"
+  },
+  {
+   "fieldname": "column_break_tax_identification",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "receiver_tax_id",
+   "fieldtype": "Data",
+   "label": "Receiver Tax ID"
   },
   {
    "fieldname": "reference_section",

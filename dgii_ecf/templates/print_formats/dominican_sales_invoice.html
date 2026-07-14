@@ -1,4 +1,5 @@
 {% set fiscal = get_ecf_print_data(doc.name) %}
+{% set property = get_billing_property_print_data(doc.name) %}
 <style>
   .ri { color: #172033; font-family: Arial, sans-serif; font-size: 10px; line-height: 1.25; }
   .ri-header { display: table; margin-bottom: 12px; width: 100%; }
@@ -46,6 +47,7 @@
       <h1>{{ _(fiscal.title) if fiscal else _("Invoice") }}</h1>
       {% if fiscal %}
         <div><strong>{{ _("e-NCF") }}:</strong> {{ fiscal.encf }}</div>
+        <div><strong>{{ _("e-CF Status") }}:</strong> {{ fiscal.status }}</div>
         {% if fiscal.sequence_expiry %}<div><strong>{{ _("Sequence Expiry Date") }}:</strong> {{ fiscal.sequence_expiry }}</div>{% endif %}
         {% if fiscal.modified_encf %}<div class="ri-reference"><strong>{{ _("Modified NCF") }}:</strong> {{ fiscal.modified_encf }}</div>{% endif %}
         {% if fiscal.correction_reason %}<div>{{ fiscal.correction_reason }}</div>{% endif %}
@@ -59,11 +61,17 @@
   <div class="ri-party">
     <div><strong>{{ _("Customer Legal Name") }}:</strong> {{ fiscal.buyer_name if fiscal else (doc.customer_name or doc.customer) }}</div>
     {% if fiscal and fiscal.buyer_rnc and fiscal.buyer_rnc != "00000000000" %}<div><strong>{{ _("Customer RNC") }}:</strong> {{ fiscal.buyer_rnc }}</div>{% endif %}
+    {% if property %}<div><strong>{{ _("Billed Unit") }}:</strong> {{ property.unit_number }} · {{ property.condominium_name }}</div>{% endif %}
   </div>
   <div class="ri-rule"></div>
 
   {% if not fiscal %}
-    <div class="ri-warning">{{ _("No electronic fiscal receipt has been generated for this invoice.") }}</div>
+    <div class="ri-warning">
+      {{ _("No electronic fiscal receipt has been generated for this invoice.") }}
+      {% if doc.docstatus == 0 %}{{ _("Return to the Sales Invoice and submit it; Refresh only updates this preview.") }}{% endif %}
+    </div>
+  {% elif fiscal.status in ("Rechazado", "ERROR") %}
+    <div class="ri-warning">{{ _("This e-CF was rejected and is not valid for fiscal purposes.") }}</div>
   {% endif %}
 
   <table class="ri-table">
@@ -125,5 +133,5 @@
     </div>
   </div>
 
-  {% if not fiscal %}<div class="ri-footer">{{ _("This document is not valid for fiscal purposes.") }}</div>{% endif %}
+  {% if not fiscal or fiscal.status in ("Rechazado", "ERROR") %}<div class="ri-footer">{{ _("This document is not valid for fiscal purposes.") }}</div>{% endif %}
 </div>
