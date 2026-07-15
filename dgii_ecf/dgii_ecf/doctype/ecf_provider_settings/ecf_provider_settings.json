@@ -16,6 +16,7 @@
   "api_key_certecf",
   "column_break_keys",
   "api_key_ecf",
+  "rate_limit_per_second",
   "base_url",
   "custom_credentials_section",
   "use_custom_credentials",
@@ -80,6 +81,14 @@
    "fieldname": "api_key_ecf",
    "fieldtype": "Password",
    "label": "API Key (Production)"
+  },
+  {
+   "default": "5",
+   "description": "Conservative default for MSeller Free. Raise only to the limit of the contracted plan.",
+   "fieldname": "rate_limit_per_second",
+   "fieldtype": "Int",
+   "label": "API Requests per Second",
+   "reqd": 1
   },
   {
    "default": "https://ecf.api.mseller.app",

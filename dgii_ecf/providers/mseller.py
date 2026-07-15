@@ -10,7 +10,7 @@ scoping). The client's built-in 401 retry refreshes expired tokens; the write-ba
 after each call captures both first logins and refreshes.
 """
 
-from __future__ import annotations
+import time
 
 import frappe
 from frappe import _
@@ -29,6 +29,7 @@ def _normalize_status(status: str | None) -> str | None:
         return status
     return {
         "error": "ERROR",
+        "pendiente": "PROCESANDO",
         "en cola": "PROCESANDO",
         "recibido": "RECIBIDO",
         "procesando": "PROCESANDO",
@@ -74,11 +75,13 @@ class MSellerProvider(EcfProvider):
             )
 
     def authenticate(self) -> str:
+        self._throttle()
         token = self._client().authenticate()
         self._persist_token()
         return token
 
     def send(self, ecf_json: dict, validate: bool = False) -> EcfResult:
+        self._throttle()
         try:
             r = self._client().send_document(ecf_json, validate=validate)
         finally:
@@ -109,10 +112,12 @@ class MSellerProvider(EcfProvider):
             security_code=r.get("securityCode"),
             qr_url=r.get("qr_url"),
             signed_date=r.get("signedDate"),
+            signed_xml_path=r.get("signedXml"),
             raw=r,
         )
 
     def get_status(self, encf: str) -> EcfResult:
+        self._throttle()
         try:
             r = self._client().get_document(encf)
         finally:
@@ -124,10 +129,13 @@ class MSellerProvider(EcfProvider):
             track_id=r.get("internalTrackId"),
             security_code=r.get("securityCode"),
             qr_url=r.get("qr_url"),
+            signed_date=r.get("signedDate"),
+            signed_xml_path=r.get("signedXml"),
             raw=r,
         )
 
     def get_status_batch(self, encfs: list[str]) -> list[EcfResult]:
+        self._throttle()
         try:
             resp = self._client().get_status_batch(encfs)
         finally:
@@ -143,7 +151,28 @@ class MSellerProvider(EcfProvider):
                     track_id=d.get("internalTrackId"),
                     security_code=d.get("securityCode"),
                     qr_url=d.get("qr_url"),
+                    signed_date=d.get("signedDate"),
+                    signed_xml_path=d.get("signedXml"),
                     raw=item,
                 )
             )
         return out
+
+    def _throttle(self):
+        """Conservative cross-worker pacing for MSeller's smallest plan.
+
+        Provider settings may raise the limit for a contracted plan.  The Redis
+        lock makes the spacing apply across every Frappe worker serving the same
+        company/environment, not merely inside one Python process.
+        """
+        configured = self.settings.get("rate_limit_per_second")
+        requests_per_second = max(1, int(configured or 5))
+        interval = 1.0 / requests_per_second
+        identity = self.settings.name or self.settings.company
+        key = f"dgii_ecf:mseller_rate:{identity}:{self.settings.environment}"
+        with frappe.cache.lock(key + ":lock", timeout=5, blocking_timeout=5):
+            now = time.time()
+            last = frappe.cache.get_value(key)
+            if last is not None:
+                time.sleep(max(0.0, interval - (now - float(last))))
+            frappe.cache.set_value(key, time.time(), expires_in_sec=5)

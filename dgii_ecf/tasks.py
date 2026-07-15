@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
+from frappe.utils import add_to_date, get_datetime, now_datetime
 
 from dgii_ecf.config import is_enabled
 from dgii_ecf.providers.registry import get_provider
 
 # Non-terminal states we keep polling.
-_PENDING = ("Pending", "RECIBIDO", "PROCESANDO")
+_PENDING = ("RECIBIDO", "PROCESANDO")
 _TERMINAL = ("Aceptado", "Aceptado Condicional", "Rechazado")
 _BATCH = 100  # MSeller batch limit
 
@@ -45,41 +46,88 @@ def poll_pending_documents():
             by_encf = {res.encf: res for res in results if res.encf}
             for d in chunk:
                 res = by_encf.get(d.encf)
-                if res and res.status and res.status != d.status:
+                if not res or not res.success:
+                    continue
+                values = {
+                    key: value
+                    for key, value in {
+                        "internal_track_id": res.track_id,
+                        "security_code": res.security_code,
+                        "qr_url": res.qr_url,
+                        "signed_date": res.signed_date,
+                        "signed_xml_path": res.signed_xml_path,
+                    }.items()
+                    if value is not None
+                }
+                status_changed = bool(res.status and res.status != d.status)
+                if status_changed:
+                    values.update(
+                        status=res.status,
+                        response_json=frappe.as_json(res.raw),
+                    )
+                if values:
                     frappe.db.set_value(
                         "ECF Document Log",
                         d.name,
-                        {
-                            "status": res.status,
-                            "response_json": frappe.as_json(res.raw),
-                        },
+                        values,
                         update_modified=False,
                     )
-                    if res.status == "Rechazado":
-                        _notify_rejection(d.name)
+                if status_changed and res.status == "Rechazado":
+                    _notify_rejection(d.name)
     frappe.db.commit()
 
 
 def retry_failed_documents():
-    """Requeue transiently failed sends; the worker reuses the original eNCF."""
+    """Recover durable outbox rows and reconcile uncertain submissions.
+
+    Definitive authentication/validation failures have no next_retry_at and are
+    intentionally excluded.  Stale SUBMITTING means a worker may have died after
+    MSeller accepted the request, so it is queried before any retransmission.
+    """
     if not is_enabled():
         return
-    for sales_invoice in frappe.get_all(
+    now = now_datetime()
+    stale_before = add_to_date(now, minutes=-10)
+    rows = frappe.get_all(
         "ECF Document Log",
         filters={
-            "status": "ERROR",
+            "status": ["in", ["Pending", "SUBMITTING", "UNCONFIRMED"]],
             "direction": "Issued",
             "reference_doctype": "Sales Invoice",
             "reference_name": ["is", "set"],
         },
-        pluck="reference_name",
-    ):
+        fields=["name", "reference_name", "status", "last_attempt_at", "next_retry_at"],
+    )
+    for row in rows:
+        if row.status == "SUBMITTING":
+            if not row.last_attempt_at or get_datetime(row.last_attempt_at) > stale_before:
+                continue
+            frappe.db.set_value(
+                "ECF Document Log",
+                row.name,
+                {"status": "UNCONFIRMED", "next_retry_at": now},
+                update_modified=False,
+            )
+            row.status = "UNCONFIRMED"
+        if row.status == "UNCONFIRMED" and (
+            not row.next_retry_at or get_datetime(row.next_retry_at) > now
+        ):
+            continue
+
+        method = (
+            "dgii_ecf.api.send_ecf_log"
+            if row.status == "Pending"
+            else "dgii_ecf.api.reconcile_ecf_log"
+        )
+        kwargs = {"ecf_log": row.name}
+        if row.status == "UNCONFIRMED":
+            kwargs.update(resend_if_missing=True, resend_remote_failure=False)
         frappe.enqueue(
-            "dgii_ecf.api.submit_sales_invoice",
+            method,
             queue="long",
-            job_id=f"ecf-submit-{sales_invoice}",
+            job_id=f"ecf-submit-{row.reference_name}",
             deduplicate=True,
-            sales_invoice=sales_invoice,
+            **kwargs,
         )
 
 

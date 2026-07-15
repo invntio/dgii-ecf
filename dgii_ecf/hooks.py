@@ -38,10 +38,8 @@ doc_events = {
 
 scheduler_events = {
     "cron": {
-        "*/15 * * * *": [
-            "dgii_ecf.tasks.poll_pending_documents",
-            "dgii_ecf.tasks.retry_failed_documents",
-        ],
+        "*/15 * * * *": ["dgii_ecf.tasks.poll_pending_documents"],
+        "* * * * *": ["dgii_ecf.tasks.retry_failed_documents"],
     },
     "daily": ["dgii_ecf.tasks.expire_ranges"],
 }

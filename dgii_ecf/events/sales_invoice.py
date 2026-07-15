@@ -7,6 +7,8 @@ from dgii_ecf.config import is_enabled
 
 _ECF_BLOCKING_STATUSES = (
     "Pending",
+    "SUBMITTING",
+    "UNCONFIRMED",
     "RECIBIDO",
     "PROCESANDO",
     "Aceptado",
@@ -35,18 +37,21 @@ def set_print_language(doc, method=None):
 
 
 def on_submit(doc, method=None):
-    """Queue the e-CF submission off the invoice's critical path.
+    """Persist the fiscal outbox row, then queue delivery after commit.
 
     Companies without enabled ECF Provider Settings are skipped entirely, so
     the app is inert until configured."""
     if not is_configured(doc.company):
         return
+    from dgii_ecf.api import prepare_sales_invoice
+
+    log = prepare_sales_invoice(doc.name)
     frappe.enqueue(
-        "dgii_ecf.api.submit_sales_invoice",
+        "dgii_ecf.api.send_ecf_log",
         queue="long",
         job_id=f"ecf-submit-{doc.name}",
         deduplicate=True,
-        sales_invoice=doc.name,
+        ecf_log=log.name,
         enqueue_after_commit=True,
     )
 

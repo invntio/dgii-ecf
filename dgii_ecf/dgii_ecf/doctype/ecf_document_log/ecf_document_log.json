@@ -27,9 +27,17 @@
   "column_break_ref",
   "qr_url",
   "signed_date",
+  "signed_xml_path",
   "payloads_section",
   "request_json",
   "response_json",
+  "delivery_section",
+  "attempt_count",
+  "last_attempt_at",
+  "column_break_delivery",
+  "next_retry_at",
+  "last_http_status",
+  "error_kind",
   "error"
  ],
  "fields": [
@@ -76,7 +84,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Pending\nRECIBIDO\nPROCESANDO\nAceptado\nAceptado Condicional\nRechazado\nERROR",
+   "options": "Pending\nSUBMITTING\nUNCONFIRMED\nRECIBIDO\nPROCESANDO\nAceptado\nAceptado Condicional\nRechazado\nERROR",
    "search_index": 1
   },
   {
@@ -164,6 +172,12 @@
    "read_only": 1
   },
   {
+   "fieldname": "signed_xml_path",
+   "fieldtype": "Small Text",
+   "label": "Signed XML Path",
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "fieldname": "payloads_section",
    "fieldtype": "Section Break",
@@ -181,6 +195,47 @@
    "fieldtype": "Code",
    "label": "Response JSON",
    "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivery_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery"
+  },
+  {
+   "default": "0",
+   "fieldname": "attempt_count",
+   "fieldtype": "Int",
+   "label": "Submission Attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_attempt_at",
+   "fieldtype": "Datetime",
+   "label": "Last Attempt At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_delivery",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "next_retry_at",
+   "fieldtype": "Datetime",
+   "label": "Next Retry At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_http_status",
+   "fieldtype": "Int",
+   "label": "Last HTTP Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error_kind",
+   "fieldtype": "Select",
+   "label": "Error Kind",
+   "options": "\nConnection\nRate Limit\nAuthentication\nValidation\nProvider\nUnknown",
    "read_only": 1
   },
   {

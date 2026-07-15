@@ -89,7 +89,7 @@ def _item_is_taxable(item) -> bool:
     )
 
 
-def _emisor(company: str) -> dict:
+def _emisor(company: str, posting_date) -> dict:
     c = frappe.get_doc("Company", company)
     emisor = {
         "RNCEmisor": _digits(c.tax_id),
@@ -100,7 +100,9 @@ def _emisor(company: str) -> dict:
         emisor["DireccionEmisor"] = address
     # DGII's XSD is sequence-sensitive: FechaEmision comes after all optional
     # issuer identity/address fields, including DireccionEmisor.
-    emisor["FechaEmision"] = _ddmmyyyy(frappe.utils.nowdate())
+    # FechaEmision belongs to the invoice, not to the delivery attempt.  A retry
+    # tomorrow must not silently turn yesterday's invoice into today's invoice.
+    emisor["FechaEmision"] = _ddmmyyyy(posting_date)
     return emisor
 
 
@@ -229,7 +231,7 @@ def build_ecf_json(si, encf: str, ecf_type: str, sequence_expiry=None) -> dict:
     encabezado = {
         "Version": "1.0",
         "IdDoc": id_doc,
-        "Emisor": _emisor(si.company),
+        "Emisor": _emisor(si.company, si.posting_date),
         "Comprador": _comprador(si),
         "Totales": totales,
     }
@@ -251,8 +253,9 @@ def build_ecf_json(si, encf: str, ecf_type: str, sequence_expiry=None) -> dict:
             "(only 31, 32, 33, 34). See ecf-document-format.md for its sections."
         )
 
-    # The signature timestamp is the final e-CF element in the DGII schema.
-    ecf["FechaHoraFirma"] = frappe.utils.now_datetime().strftime("%d-%m-%Y %H:%M:%S")
+    # MSeller applies the real signing timestamp.  Keep the schema element but do
+    # not pretend the client-side build time is the cryptographic signing time.
+    ecf["FechaHoraFirma"] = ""
 
     return {"ECF": ecf}
 

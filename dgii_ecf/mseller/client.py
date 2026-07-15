@@ -24,8 +24,16 @@ class MSellerError(Exception):
     """Base error for MSeller transport failures."""
 
 
+class MSellerConnectionError(MSellerError):
+    """The request outcome is unknown because transport failed."""
+
+
 class MSellerAuthError(MSellerError):
     """401/403 — bad credentials, expired token, or invalid API key."""
+
+    def __init__(self, message: str, status_code: int | None = None):
+        self.status_code = status_code
+        super().__init__(message)
 
 
 class MSellerHTTPError(MSellerError):
@@ -79,11 +87,17 @@ class MSellerClient:
                 timeout=self.timeout,
             )
         except requests.RequestException as e:
-            raise MSellerError(f"Connection error to MSeller: {e}") from e
+            raise MSellerConnectionError(f"Connection error to MSeller: {e}") from e
 
         data = _safe_json(r)
         if r.status_code == 401:
-            raise MSellerAuthError(f"Invalid credentials or expired token: {data}")
+            raise MSellerAuthError(
+                f"Invalid credentials or expired token: {data}", status_code=401
+            )
+        if r.status_code == 403:
+            raise MSellerAuthError(
+                f"Invalid credentials or permissions: {data}", status_code=403
+            )
         if r.status_code >= 400:
             raise MSellerHTTPError(r.status_code, data)
 
@@ -112,10 +126,19 @@ class MSellerClient:
                 r = requests.request(method, url, headers=headers,
                                      timeout=self.timeout, **kw)
             except requests.RequestException as e:
-                raise MSellerError(f"Connection error to MSeller: {e}") from e
+                raise MSellerConnectionError(
+                    f"Connection error to MSeller: {e}"
+                ) from e
             if r.status_code == 401 and attempt == 1:
                 self.authenticate(force=True)   # token expired -> refresh, retry once
                 continue
+            if r.status_code == 401:
+                raise MSellerAuthError(str(_safe_json(r)), status_code=401)
+            if r.status_code == 403:
+                raise MSellerAuthError(
+                    f"Invalid API key or permissions: {_safe_json(r)}",
+                    status_code=403,
+                )
             return r
         return r  # pragma: no cover
 
@@ -134,9 +157,11 @@ class MSellerClient:
         data = _safe_json(r)
 
         if r.status_code == 401:
-            raise MSellerAuthError(str(data))
+            raise MSellerAuthError(str(data), status_code=401)
         if r.status_code == 403:
-            raise MSellerAuthError(f"Invalid API key or permissions: {data}")
+            raise MSellerAuthError(
+                f"Invalid API key or permissions: {data}", status_code=403
+            )
         # A validation failure comes back as 4xx with ECF_VALIDATION_FAILED — let the
         # caller inspect it rather than raising, since validate=true expects errors.
         if validate:

@@ -26,6 +26,7 @@ class EcfResult:
     security_code: str | None = None
     qr_url: str | None = None
     signed_date: str | None = None
+    signed_xml_path: str | None = None
     error: str | None = None
     raw: dict = field(default_factory=dict)   # full provider response, for the log
 
