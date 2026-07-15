@@ -25,6 +25,14 @@ from dgii_ecf.dgii_ecf.doctype.ecf_sequence_range.ecf_sequence_range import (
 COMPANY = "ECF Test Co"
 
 
+def _invoice_log_filters(invoice: str) -> dict:
+    return {
+        "direction": "Issued",
+        "reference_doctype": "Sales Invoice",
+        "reference_name": invoice,
+    }
+
+
 def _ensure_test_company():
     if frappe.db.exists("Company", COMPANY):
         return
@@ -63,6 +71,40 @@ def _ensure_test_invoice():
     return si
 
 
+def _ensure_test_purchase_invoice():
+    _ensure_test_company()
+    _ensure_test_invoice()
+    supplier = "ECF Test Supplier"
+    if not frappe.db.exists("Supplier", supplier):
+        frappe.get_doc(
+            {
+                "doctype": "Supplier",
+                "supplier_name": supplier,
+                "supplier_group": "All Supplier Groups",
+                "tax_id": "131000001",
+            }
+        ).insert(ignore_permissions=True)
+    name = frappe.db.get_value(
+        "Purchase Invoice", {"company": COMPANY, "supplier": supplier}, "name"
+    )
+    if name:
+        return frappe.get_doc("Purchase Invoice", name)
+    invoice = frappe.get_doc(
+        {
+            "doctype": "Purchase Invoice",
+            "company": COMPANY,
+            "supplier": supplier,
+            "bill_no": "ECF-TEST-PURCHASE-1",
+            "bill_date": frappe.utils.today(),
+            "items": [
+                {"item_code": "ECF-TEST-SERVICE", "qty": 1, "rate": 500}
+            ],
+        }
+    )
+    invoice.insert(ignore_permissions=True)
+    return invoice
+
+
 def _fake_settings():
     s = MagicMock()
     s.environment = "TesteCF"
@@ -76,16 +118,16 @@ class TestPrinting(FrappeTestCase):
     def setUp(self):
         frappe.set_user("Administrator")
         self.si = _ensure_test_invoice()
-        frappe.db.delete("ECF Document Log", {"sales_invoice": self.si.name})
+        frappe.db.delete("ECF Document Log", _invoice_log_filters(self.si.name))
 
     def tearDown(self):
-        frappe.db.delete("ECF Document Log", {"sales_invoice": self.si.name})
+        frappe.db.delete("ECF Document Log", _invoice_log_filters(self.si.name))
 
     def test_print_data_comes_from_document_log(self):
         log = frappe.get_doc({
             "doctype": "ECF Document Log",
             "company": COMPANY,
-            "sales_invoice": self.si.name,
+            **_invoice_log_filters(self.si.name),
             "ecf_type": "32",
             "encf": "E320000088888",
             "status": "Aceptado",
@@ -421,10 +463,10 @@ class TestBuilder(FrappeTestCase):
     def test_type33_references_original_ecf_from_log(self):
         from dgii_ecf.ecf.builder import build_ecf_json
 
-        frappe.db.delete("ECF Document Log", {"sales_invoice": self.si.name})
+        frappe.db.delete("ECF Document Log", _invoice_log_filters(self.si.name))
         frappe.get_doc({
             "doctype": "ECF Document Log", "company": COMPANY,
-            "sales_invoice": self.si.name, "ecf_type": "31",
+            **_invoice_log_filters(self.si.name), "ecf_type": "31",
             "encf": "E319999999901", "status": "Aceptado",
         }).insert(ignore_permissions=True)
 
@@ -453,10 +495,11 @@ class TestPolling(FrappeTestCase):
         frappe.set_user("Administrator")
         self._ecf_enabled = frappe.conf.get("dgii_ecf_enabled")
         frappe.conf.dgii_ecf_enabled = 1
-        _ensure_test_company()
+        self.si = _ensure_test_invoice()
         frappe.db.delete("ECF Document Log", {"encf": "E320000099999"})
         self.log = frappe.get_doc({
             "doctype": "ECF Document Log", "company": COMPANY,
+            **_invoice_log_filters(self.si.name),
             "ecf_type": "32", "encf": "E320000099999", "status": "RECIBIDO",
         }).insert(ignore_permissions=True)
 
@@ -515,10 +558,10 @@ class TestFiscalHardening(FrappeTestCase):
     def test_cancel_blocked_while_ecf_accepted_or_in_flight(self):
         from dgii_ecf.events.sales_invoice import on_cancel
 
-        frappe.db.delete("ECF Document Log", {"sales_invoice": self.si.name})
+        frappe.db.delete("ECF Document Log", _invoice_log_filters(self.si.name))
         frappe.get_doc({
             "doctype": "ECF Document Log", "company": COMPANY,
-            "sales_invoice": self.si.name, "ecf_type": "31",
+            **_invoice_log_filters(self.si.name), "ecf_type": "31",
             "encf": "E319999999902", "status": "Aceptado",
         }).insert(ignore_permissions=True)
         try:
@@ -526,12 +569,59 @@ class TestFiscalHardening(FrappeTestCase):
                 on_cancel(self.si)
             # Rejected e-CF does not block cancellation.
             frappe.db.set_value(
-                "ECF Document Log", {"sales_invoice": self.si.name},
+                "ECF Document Log", _invoice_log_filters(self.si.name),
                 "status", "Rechazado",
             )
             on_cancel(self.si)  # must not raise
         finally:
-            frappe.db.delete("ECF Document Log", {"sales_invoice": self.si.name})
+            frappe.db.delete("ECF Document Log", _invoice_log_filters(self.si.name))
+
+
+class TestDocumentLogReference(FrappeTestCase):
+    def setUp(self):
+        frappe.set_user("Administrator")
+        self.purchase_invoice = _ensure_test_purchase_invoice()
+        frappe.db.delete("ECF Document Log", {"encf": "E310000077777"})
+
+    def tearDown(self):
+        frappe.db.delete("ECF Document Log", {"encf": "E310000077777"})
+
+    def test_received_ecf_links_to_native_purchase_invoice(self):
+        log = frappe.get_doc(
+            {
+                "doctype": "ECF Document Log",
+                "company": COMPANY,
+                "direction": "Received",
+                "reference_doctype": "Purchase Invoice",
+                "reference_name": self.purchase_invoice.name,
+                "ecf_type": "31",
+                "encf": "E310000077777",
+                "issuer_tax_id": "1-31-00000-1",
+                "receiver_tax_id": "1-02-32070-5",
+                "status": "RECIBIDO",
+            }
+        ).insert(ignore_permissions=True)
+
+        self.assertEqual(log.reference_doctype, "Purchase Invoice")
+        self.assertEqual(log.reference_name, self.purchase_invoice.name)
+        self.assertEqual(log.issuer_tax_id, "131000001")
+        self.assertEqual(log.receiver_tax_id, "102320705")
+
+    def test_duplicate_received_encf_for_same_issuer_is_rejected(self):
+        values = {
+            "doctype": "ECF Document Log",
+            "company": COMPANY,
+            "direction": "Received",
+            "reference_doctype": "Purchase Invoice",
+            "reference_name": self.purchase_invoice.name,
+            "ecf_type": "31",
+            "encf": "E310000077777",
+            "issuer_tax_id": "131000001",
+            "status": "RECIBIDO",
+        }
+        frappe.get_doc(values).insert(ignore_permissions=True)
+        with self.assertRaises(frappe.ValidationError):
+            frappe.get_doc(values).insert(ignore_permissions=True)
 
 
 class TestCredentialResolution(FrappeTestCase):

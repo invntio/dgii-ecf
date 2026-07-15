@@ -46,4 +46,5 @@ scheduler_events = {
 
 override_doctype_dashboards = {
     "Sales Invoice": "dgii_ecf.dashboard.sales_invoice_dashboard",
+    "Purchase Invoice": "dgii_ecf.dashboard.purchase_invoice_dashboard",
 }

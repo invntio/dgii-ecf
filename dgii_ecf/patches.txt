@@ -1,4 +1,5 @@
 [pre_model_sync]
 
 [post_model_sync]
-dgii_ecf.patches.generalize_document_log_reference
+# Prelaunch app: change custom DocType metadata at its source. Reserve patches
+# for future one-time data transformations between released versions.
