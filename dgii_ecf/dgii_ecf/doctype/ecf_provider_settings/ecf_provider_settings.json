@@ -18,6 +18,14 @@
   "api_key_ecf",
   "rate_limit_per_second",
   "base_url",
+  "provider_health_section",
+  "circuit_state",
+  "circuit_open_until",
+  "consecutive_failures",
+  "column_break_provider_health",
+  "failure_window_started_at",
+  "last_provider_success_at",
+  "last_provider_failure_at",
   "custom_credentials_section",
   "use_custom_credentials",
   "email",
@@ -84,7 +92,7 @@
   },
   {
    "default": "5",
-   "description": "Conservative default for MSeller Free. Raise only to the limit of the contracted plan.",
+   "description": "Conservative default. Set this to the confirmed per-key limit of the contracted MSeller plan.",
    "fieldname": "rate_limit_per_second",
    "fieldtype": "Int",
    "label": "API Requests per Second",
@@ -95,6 +103,56 @@
    "fieldname": "base_url",
    "fieldtype": "Data",
    "label": "Base URL"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "provider_health_section",
+   "fieldtype": "Section Break",
+   "label": "Provider Health"
+  },
+  {
+   "default": "Closed",
+   "fieldname": "circuit_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Circuit State",
+   "options": "Closed\nOpen\nHalf Open",
+   "read_only": 1
+  },
+  {
+   "fieldname": "circuit_open_until",
+   "fieldtype": "Datetime",
+   "label": "Circuit Open Until",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "consecutive_failures",
+   "fieldtype": "Int",
+   "label": "Consecutive Provider Failures",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_provider_health",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "failure_window_started_at",
+   "fieldtype": "Datetime",
+   "label": "Failure Window Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_provider_success_at",
+   "fieldtype": "Datetime",
+   "label": "Last Provider Success At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_provider_failure_at",
+   "fieldtype": "Datetime",
+   "label": "Last Provider Failure At",
+   "read_only": 1
   },
   {
    "collapsible": 1,

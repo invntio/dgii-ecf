@@ -235,7 +235,8 @@ cross-worker limiter enforces the configured per-company request rate.
 | Schedule | Task |
 | --- | --- |
 | Every minute | Dispatch unsent outbox rows and reconcile due/stale attempts |
-| Every 15 minutes | Query non-terminal documents through MSeller batch status |
+| Every minute | Query only due non-terminal documents through MSeller batch status (adaptive cadence) |
+| Every 5 minutes | Evaluate stalled-document alerts |
 | Daily | Mark expired eNCF ranges as `Expired` |
 
 Workers must consume the `long` queue. A healthy scheduler is required for
@@ -333,6 +334,13 @@ Coverage includes payload construction, sequence locking/exhaustion, readiness,
 credential resolution, provider mapping, printing, references, polling,
 transactional outbox recovery, error classification, backoff, authentication,
 and query-before-retransmit.
+
+When the site feature gate is enabled, a Dominican Company may save Sales
+Invoice drafts, but submission is blocked until its provider, credentials,
+fiscal data, and authorized sequence are ready. Submission allocates the e-NCF
+and persists the e-CF outbox row before commit; network/provider delivery is
+asynchronous and retryable. A provider outage therefore produces a generated
+e-CF pending transmission, not a submitted invoice without e-CF.
 
 Live evidence and its limitations are recorded in
 [the MIGOR TesteCF smoke report](docs/mseller-live-smoke-migor-2026-07-13.md).

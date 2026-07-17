@@ -25,7 +25,10 @@ jinja = {
     ]
 }
 
-doctype_js = {"Sales Invoice": "public/js/sales_invoice.js"}
+doctype_js = {
+    "Sales Invoice": "public/js/sales_invoice.js",
+    "ECF Document Log": "public/js/ecf_document_log.js",
+}
 
 doc_events = {
     "Sales Invoice": {
@@ -38,8 +41,11 @@ doc_events = {
 
 scheduler_events = {
     "cron": {
-        "*/15 * * * *": ["dgii_ecf.tasks.poll_pending_documents"],
-        "* * * * *": ["dgii_ecf.tasks.retry_failed_documents"],
+        "* * * * *": [
+            "dgii_ecf.tasks.retry_failed_documents",
+            "dgii_ecf.tasks.poll_pending_documents",
+        ],
+        "*/5 * * * *": ["dgii_ecf.tasks.alert_stalled_documents"],
     },
     "daily": ["dgii_ecf.tasks.expire_ranges"],
 }
@@ -47,4 +53,5 @@ scheduler_events = {
 override_doctype_dashboards = {
     "Sales Invoice": "dgii_ecf.dashboard.sales_invoice_dashboard",
     "Purchase Invoice": "dgii_ecf.dashboard.purchase_invoice_dashboard",
+    "ECF Document Log": "dgii_ecf.dashboard.ecf_document_log_dashboard",
 }

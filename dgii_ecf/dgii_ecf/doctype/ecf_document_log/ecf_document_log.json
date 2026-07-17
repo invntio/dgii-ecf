@@ -30,12 +30,24 @@
   "signed_xml_path",
   "payloads_section",
   "request_json",
+  "request_sha256",
   "response_json",
   "delivery_section",
   "attempt_count",
   "last_attempt_at",
+  "first_unconfirmed_at",
+  "not_found_count",
   "column_break_delivery",
   "next_retry_at",
+  "status_sync_section",
+  "last_status_checked_at",
+  "next_status_check_at",
+  "status_check_count",
+  "column_break_status_sync",
+  "last_remote_status_at",
+  "operator_action_required",
+  "alert_level",
+  "last_alert_signature",
   "last_http_status",
   "error_kind",
   "error"
@@ -191,6 +203,12 @@
    "read_only": 1
   },
   {
+   "fieldname": "request_sha256",
+   "fieldtype": "Data",
+   "label": "Request SHA-256",
+   "read_only": 1
+  },
+  {
    "fieldname": "response_json",
    "fieldtype": "Code",
    "label": "Response JSON",
@@ -216,6 +234,19 @@
    "read_only": 1
   },
   {
+   "fieldname": "first_unconfirmed_at",
+   "fieldtype": "Datetime",
+   "label": "First Unconfirmed At",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "not_found_count",
+   "fieldtype": "Int",
+   "label": "Consecutive Not Found Checks",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_delivery",
    "fieldtype": "Column Break"
   },
@@ -223,6 +254,64 @@
    "fieldname": "next_retry_at",
    "fieldtype": "Datetime",
    "label": "Next Retry At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_sync_section",
+   "fieldtype": "Section Break",
+   "label": "Status Synchronization"
+  },
+  {
+   "fieldname": "last_status_checked_at",
+   "fieldtype": "Datetime",
+   "label": "Last Status Checked At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "next_status_check_at",
+   "fieldtype": "Datetime",
+   "label": "Next Status Check At",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "status_check_count",
+   "fieldtype": "Int",
+   "label": "Status Check Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status_sync",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_remote_status_at",
+   "fieldtype": "Datetime",
+   "label": "Last Remote Status At",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "operator_action_required",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Operator Action Required",
+   "read_only": 1
+  },
+  {
+   "fieldname": "alert_level",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Alert Level",
+   "options": "\nWarning\nCritical",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_alert_signature",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Last Alert Signature",
    "read_only": 1
   },
   {

@@ -8,15 +8,26 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from dgii_ecf.delivery import request_sha256
+
 
 class ECFDocumentLog(Document):
     def validate(self):
+        self._validate_immutable_request()
+        self.request_sha256 = request_sha256(self.request_json)
         self._normalize_tax_ids()
         self._populate_tax_ids_from_request()
         self._validate_reference()
         self._validate_modified_document()
         self._validate_received_document()
         self._validate_duplicate()
+
+    def _validate_immutable_request(self):
+        if self.is_new():
+            return
+        original = frappe.db.get_value("ECF Document Log", self.name, "request_json")
+        if (original or "") != (self.request_json or ""):
+            frappe.throw(_("The original e-CF request payload is immutable."))
 
     def _normalize_tax_ids(self):
         self.issuer_tax_id = _digits(self.issuer_tax_id)
@@ -87,6 +98,10 @@ class ECFDocumentLog(Document):
                     self.encf, self.issuer_tax_id or _("Unknown")
                 )
             )
+
+    def on_trash(self):
+        if frappe.db.exists("DocType", "ECF Delivery Event"):
+            frappe.db.delete("ECF Delivery Event", {"ecf_document_log": self.name})
 
 
 def _digits(value: str | None) -> str:

@@ -67,7 +67,10 @@ def _ensure_test_invoice():
         "items": [{"item_code": "ECF-TEST-SERVICE", "qty": 1, "rate": 1000}],
     })
     si.insert(ignore_permissions=True)
-    si.submit()
+    # Shared accounting fixture: individual tests opt into fiscal enforcement
+    # explicitly and must not depend on the site's current feature-gate value.
+    with patch("dgii_ecf.config.is_enabled", return_value=False):
+        si.submit()
     return si
 
 
@@ -183,6 +186,28 @@ class TestPrinting(FrappeTestCase):
         self.assertTrue(data_uri.startswith("data:image/svg+xml;base64,"))
         self.assertEqual(qr_svg_data_uri(None), "")
 
+    def test_submitted_invoice_without_ecf_renders_blocking_fiscal_warning(self):
+        html = frappe.render_template(
+            "dgii_ecf/templates/print_formats/dominican_sales_invoice.html",
+            {"doc": self.si},
+            is_path=True,
+        )
+
+        self.assertIn('class="ri-danger"', html)
+        self.assertIn("not an e-CF printed representation", html)
+
+    def test_draft_without_ecf_renders_neutral_preview_message(self):
+        draft = frappe.get_doc("Sales Invoice", self.si.name)
+        draft.docstatus = 0
+        html = frappe.render_template(
+            "dgii_ecf/templates/print_formats/dominican_sales_invoice.html",
+            {"doc": draft},
+            is_path=True,
+        )
+
+        self.assertIn('class="ri-notice"', html)
+        self.assertIn("Draft preview", html)
+
     def test_billing_property_is_optional_without_bohio_custom_field(self):
         meta = MagicMock()
         meta.has_field.return_value = False
@@ -255,8 +280,7 @@ class TestReadiness(FrappeTestCase):
         }
         invoice = frappe._dict(company=COMPANY)
         with (
-            patch("dgii_ecf.readiness.is_enabled", return_value=True),
-            patch.object(frappe.db, "exists", return_value="Condo ECF Settings"),
+            patch("dgii_ecf.readiness.is_required_for_company", return_value=True),
             patch("dgii_ecf.readiness.pick_ecf_type", return_value="32"),
             patch("dgii_ecf.readiness.get_ecf_readiness", return_value=problems),
         ):
@@ -269,12 +293,38 @@ class TestReadiness(FrappeTestCase):
     def test_submit_readiness_is_inert_when_site_feature_is_disabled(self):
         invoice = frappe._dict(company=COMPANY)
         with (
-            patch("dgii_ecf.readiness.is_enabled", return_value=False),
-            patch.object(frappe.db, "exists") as exists,
+            patch(
+                "dgii_ecf.readiness.is_required_for_company",
+                return_value=False,
+            ),
+            patch("dgii_ecf.readiness.get_ecf_readiness") as readiness,
         ):
             validate_sales_invoice_readiness(invoice)
 
-        exists.assert_not_called()
+        readiness.assert_not_called()
+
+    def test_dominican_company_without_provider_setup_cannot_submit(self):
+        invoice = frappe._dict(company=COMPANY)
+        problems = {
+            "ready": False,
+            "ecf_type": "32",
+            "missing": [
+                {
+                    "section": "Electronic Invoicing",
+                    "label": "ECF Provider",
+                    "reason": "Electronic invoicing has not been configured for this company.",
+                }
+            ],
+        }
+        with (
+            patch("dgii_ecf.readiness.is_required_for_company", return_value=True),
+            patch("dgii_ecf.readiness.pick_ecf_type", return_value="32"),
+            patch("dgii_ecf.readiness.get_ecf_readiness", return_value=problems),
+        ):
+            with self.assertRaises(frappe.ValidationError) as exc:
+                validate_sales_invoice_readiness(invoice)
+
+        self.assertIn("ECF Provider", str(exc.exception))
 
 
 class TestMSellerProviderMapping(FrappeTestCase):

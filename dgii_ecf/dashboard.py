@@ -24,3 +24,13 @@ def sales_invoice_dashboard(data):
 
 def purchase_invoice_dashboard(data):
     return _append_ecf_connection(data, "Purchase Invoice")
+
+
+def ecf_document_log_dashboard(data):
+    data.setdefault("non_standard_fieldnames", {})["ECF Delivery Event"] = (
+        "ecf_document_log"
+    )
+    data.setdefault("transactions", []).append(
+        {"label": "Delivery Audit", "items": ["ECF Delivery Event"]}
+    )
+    return data

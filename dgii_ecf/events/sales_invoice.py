@@ -3,7 +3,7 @@
 import frappe
 from frappe import _
 
-from dgii_ecf.config import is_enabled
+from dgii_ecf.config import is_enabled, is_required_for_company
 
 _ECF_BLOCKING_STATUSES = (
     "Pending",
@@ -39,10 +39,20 @@ def set_print_language(doc, method=None):
 def on_submit(doc, method=None):
     """Persist the fiscal outbox row, then queue delivery after commit.
 
-    Companies without enabled ECF Provider Settings are skipped entirely, so
-    the app is inert until configured."""
-    if not is_configured(doc.company):
+    A Dominican invoice cannot be committed without first persisting its local
+    e-CF/e-NCF. Delivery remains asynchronous, so a provider or network outage
+    leaves a durable row for retry instead of creating a non-electronic invoice.
+    """
+    if not is_required_for_company(doc.company):
         return
+    if not is_configured(doc.company):
+        frappe.throw(
+            _(
+                "Electronic invoicing must be configured and enabled for company {0} "
+                "before submitting Sales Invoices."
+            ).format(doc.company),
+            title=_("Electronic invoicing is required"),
+        )
     from dgii_ecf.api import prepare_sales_invoice
 
     log = prepare_sales_invoice(doc.name)
