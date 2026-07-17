@@ -1,6 +1,7 @@
 """Installation and migration invariants for the standalone app."""
 
 import frappe
+from frappe.utils import now_datetime
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
@@ -54,3 +55,45 @@ def ensure_module_owner():
             update_modified=False,
         )
     make_custom_fields()
+    backfill_delivery_metadata()
+
+
+def backfill_delivery_metadata():
+    """Upgrade existing outbox rows without sending or notifying documents."""
+    if not frappe.db.exists("DocType", "ECF Document Log"):
+        return
+    from dgii_ecf.delivery import (
+        BLOCKED_STATUSES,
+        REMOTE_IN_FLIGHT_STATUSES,
+        request_sha256,
+    )
+
+    for row in frappe.get_all(
+        "ECF Document Log",
+        fields=[
+            "name",
+            "status",
+            "request_json",
+            "request_sha256",
+            "last_remote_status_at",
+            "next_status_check_at",
+        ],
+    ):
+        values = {}
+        if not row.request_sha256:
+            values["request_sha256"] = request_sha256(row.request_json)
+        if row.status in BLOCKED_STATUSES:
+            values.update(
+                operator_action_required=1,
+                alert_level="Critical",
+                next_retry_at=None,
+                next_status_check_at=None,
+            )
+        elif row.status in REMOTE_IN_FLIGHT_STATUSES:
+            reference_time = row.last_remote_status_at or now_datetime()
+            values.setdefault("last_remote_status_at", reference_time)
+            values.setdefault("next_status_check_at", reference_time)
+        if values:
+            frappe.db.set_value(
+                "ECF Document Log", row.name, values, update_modified=False
+            )

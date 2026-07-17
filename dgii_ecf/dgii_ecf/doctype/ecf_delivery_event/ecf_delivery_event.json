@@ -1,0 +1,167 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:ECF-EVENT-{#####}",
+ "creation": "2026-07-17 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "ecf_document_log",
+  "encf",
+  "column_break_reference",
+  "reference_doctype",
+  "reference_name",
+  "event_section",
+  "event_type",
+  "event_timestamp",
+  "actor",
+  "column_break_event",
+  "status_before",
+  "status_after",
+  "attempt_number",
+  "request_sha256",
+  "transport_section",
+  "http_status",
+  "error_kind",
+  "response_json"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "ecf_document_log",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "e-CF Document Log",
+   "options": "ECF Document Log",
+   "reqd": 1
+  },
+  {
+   "fieldname": "encf",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "eNCF",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_reference",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference DocType",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Document",
+   "options": "reference_doctype"
+  },
+  {
+   "fieldname": "event_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery Event"
+  },
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Event Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "event_timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Event Timestamp",
+   "reqd": 1
+  },
+  {
+   "fieldname": "actor",
+   "fieldtype": "Data",
+   "label": "Actor"
+  },
+  {
+   "fieldname": "column_break_event",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status_before",
+   "fieldtype": "Data",
+   "label": "Status Before"
+  },
+  {
+   "fieldname": "status_after",
+   "fieldtype": "Data",
+   "label": "Status After"
+  },
+  {
+   "default": "0",
+   "fieldname": "attempt_number",
+   "fieldtype": "Int",
+   "label": "Attempt Number"
+  },
+  {
+   "fieldname": "request_sha256",
+   "fieldtype": "Data",
+   "label": "Request SHA-256"
+  },
+  {
+   "fieldname": "transport_section",
+   "fieldtype": "Section Break",
+   "label": "Transport"
+  },
+  {
+   "fieldname": "http_status",
+   "fieldtype": "Int",
+   "label": "HTTP Status"
+  },
+  {
+   "fieldname": "error_kind",
+   "fieldtype": "Data",
+   "label": "Error Kind"
+  },
+  {
+   "fieldname": "response_json",
+   "fieldtype": "Code",
+   "label": "Sanitized Response",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "in_create": 0,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-07-17 00:00:00",
+ "module": "DGII ECF",
+ "name": "ECF Delivery Event",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "role": "System Manager"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "event_timestamp",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

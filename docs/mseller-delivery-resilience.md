@@ -1,5 +1,8 @@
 # MSeller delivery resilience
 
+The production-hardening design that extends this runbook is documented in
+[Bohio <-> MSeller contingency design](mseller-contingency-design.md).
+
 This app treats Frappe-to-MSeller delivery and MSeller-to-DGII processing as
 separate failure boundaries.
 
@@ -32,8 +35,9 @@ separate failure boundaries.
 
 Connection failures, HTTP 429, and HTTP 5xx use a 1, 2, 5, 15, 30, then
 60-minute capped backoff. Before retransmitting an uncertain submission, the app
-queries MSeller by eNCF. A retransmission occurs only when MSeller reports that
-the eNCF is absent, or an authorized user explicitly retries a remote failure.
+queries MSeller by eNCF. A retransmission occurs only after two `found=false`
+responses separated by the grace interval, or when an authorized user explicitly
+retries a remote failure that MSeller reports as error/rejected.
 
 HTTP 400, persistent 401, and 403 responses are not automatically retried.
 
@@ -47,3 +51,5 @@ HTTP 400, persistent 401, and 403 responses are not automatically retried.
    security codes, QR URLs, and signed XML paths.
 5. Periodically test by disabling connectivity, restoring it, and confirming
    that the outbox reconciles without consuming another eNCF.
+6. Review append-only `ECF Delivery Event` records for every attempt, response,
+   reconciliation, alert, and state transition.

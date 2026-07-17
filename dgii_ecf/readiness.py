@@ -8,7 +8,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, today
 
-from dgii_ecf.config import is_enabled
+from dgii_ecf.config import is_required_for_company
 from dgii_ecf.ecf.builder import pick_ecf_type
 
 
@@ -141,12 +141,9 @@ def sales_invoice_readiness(sales_invoice: str) -> dict:
 
 def validate_sales_invoice_readiness(doc, method=None) -> None:
     """Block submit with one actionable message containing every missing field."""
-    # Match the on-submit feature gate. If e-CF is disabled for the site, the
-    # integration must neither block the draft nor silently skip after blocking.
-    if not is_enabled():
-        return
-    settings = frappe.db.exists("ECF Provider Settings", {"company": doc.company, "enabled": 1})
-    if not settings:
+    # Drafts remain editable, but every submitted invoice of a Dominican
+    # company on an e-CF-enabled site must pass the complete fiscal preflight.
+    if not is_required_for_company(doc.company):
         return
     result = _add_buyer_requirements(
         get_ecf_readiness(doc.company, pick_ecf_type(doc)), doc

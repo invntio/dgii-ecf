@@ -26,7 +26,10 @@
   .ri-total-label { font-weight: 700; text-align: right; width: 60%; }
   .ri-total-value { border: 1px solid #aab0b8; text-align: right; width: 40%; }
   .ri-total-final { font-size: 11px; }
+  .ri-notice { background: #eff6ff; border: 1px solid #60a5fa; margin: 12px 0; padding: 8px; }
   .ri-warning { background: #fff7ed; border: 1px solid #fb923c; margin: 12px 0; padding: 8px; }
+  .ri-danger { background: #fef2f2; border: 2px solid #dc2626; color: #7f1d1d; margin: 12px 0; padding: 9px; }
+  .ri-message-title { display: block; font-size: 11px; margin-bottom: 3px; text-transform: uppercase; }
   .ri-footer { bottom: 8mm; color: #4b5563; font-size: 8px; margin-top: 30px; }
   .ri-reference { font-weight: 700; margin-top: 4px; }
   @media print {
@@ -65,13 +68,28 @@
   </div>
   <div class="ri-rule"></div>
 
-  {% if not fiscal %}
-    <div class="ri-warning">
-      {{ _("No electronic fiscal receipt has been generated for this invoice.") }}
-      {% if doc.docstatus == 0 %}{{ _("Return to the Sales Invoice and submit it; Refresh only updates this preview.") }}{% endif %}
+  {% set pending_statuses = ("Pending", "SUBMITTING", "UNCONFIRMED", "RECIBIDO", "PROCESANDO") %}
+  {% set invalid_fiscal = fiscal and (fiscal.status == "Rechazado" or (fiscal.status == "ERROR" and fiscal.error_kind == "Validation")) %}
+  {% if not fiscal and doc.docstatus == 0 %}
+    <div class="ri-notice">
+      <strong class="ri-message-title">{{ _("Draft preview") }}</strong>
+      {{ _("The e-CF and its fiscal identifiers will be generated when this invoice is submitted.") }}
     </div>
-  {% elif fiscal.status in ("Rechazado", "ERROR") %}
-    <div class="ri-warning">{{ _("This e-CF was rejected and is not valid for fiscal purposes.") }}</div>
+  {% elif not fiscal %}
+    <div class="ri-danger">
+      <strong class="ri-message-title">{{ _("Electronic fiscal receipt missing") }}</strong>
+      {{ _("This submitted invoice has no e-CF and must not be delivered as a fiscal receipt. Configure electronic invoicing and regularize the invoice before issuing it to the customer.") }}
+    </div>
+  {% elif invalid_fiscal %}
+    <div class="ri-danger">
+      <strong class="ri-message-title">{{ _("Electronic fiscal receipt rejected") }}</strong>
+      {{ _("This e-CF was rejected or failed fiscal validation and is not valid for fiscal purposes.") }}
+    </div>
+  {% elif fiscal.status in pending_statuses or fiscal.status == "ERROR" %}
+    <div class="ri-warning">
+      <strong class="ri-message-title">{{ _("Electronic fiscal receipt pending") }}</strong>
+      {{ _("The e-CF was generated, but its transmission or DGII validation is still pending. Verify its final status before using it for fiscal purposes.") }}
+    </div>
   {% endif %}
 
   <table class="ri-table">
@@ -133,5 +151,11 @@
     </div>
   </div>
 
-  {% if not fiscal or fiscal.status in ("Rechazado", "ERROR") %}<div class="ri-footer">{{ _("This document is not valid for fiscal purposes.") }}</div>{% endif %}
+  {% if not fiscal and doc.docstatus == 0 %}
+    <div class="ri-footer">{{ _("Draft — not a fiscal document.") }}</div>
+  {% elif not fiscal %}
+    <div class="ri-footer">{{ _("This document is not an e-CF printed representation and is not valid for fiscal purposes.") }}</div>
+  {% elif invalid_fiscal %}
+    <div class="ri-footer">{{ _("This document is not valid for fiscal purposes.") }}</div>
+  {% endif %}
 </div>
