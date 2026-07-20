@@ -15,32 +15,34 @@ from __future__ import annotations
 
 import requests
 
+from dgii_ecf.providers.errors import (
+    ProviderAuthError,
+    ProviderConnectionError,
+    ProviderError,
+    ProviderHTTPError,
+    safe_provider_payload_text,
+)
+
 # Environment is a PATH SEGMENT, not a header.
 VALID_ENVIRONMENTS = ("TesteCF", "CerteCF", "eCF")
 DEFAULT_BASE_URL = "https://ecf.api.mseller.app"
 
 
-class MSellerError(Exception):
+class MSellerError(ProviderError):
     """Base error for MSeller transport failures."""
 
 
-class MSellerConnectionError(MSellerError):
+class MSellerConnectionError(ProviderConnectionError, MSellerError):
     """The request outcome is unknown because transport failed."""
 
 
-class MSellerAuthError(MSellerError):
+class MSellerAuthError(ProviderAuthError, MSellerError):
     """401/403 — bad credentials, expired token, or invalid API key."""
 
-    def __init__(self, message: str, status_code: int | None = None):
-        self.status_code = status_code
-        super().__init__(message)
 
-
-class MSellerHTTPError(MSellerError):
+class MSellerHTTPError(ProviderHTTPError, MSellerError):
     def __init__(self, status_code: int, payload):
-        self.status_code = status_code
-        self.payload = payload
-        super().__init__(f"MSeller HTTP {status_code}: {payload}")
+        ProviderHTTPError.__init__(self, status_code, payload, provider="MSeller")
 
 
 class MSellerClient:
@@ -92,11 +94,15 @@ class MSellerClient:
         data = _safe_json(r)
         if r.status_code == 401:
             raise MSellerAuthError(
-                f"Invalid credentials or expired token: {data}", status_code=401
+                "Invalid credentials or expired token: "
+                f"{safe_provider_payload_text(data)}",
+                status_code=401,
             )
         if r.status_code == 403:
             raise MSellerAuthError(
-                f"Invalid credentials or permissions: {data}", status_code=403
+                "Invalid credentials or permissions: "
+                f"{safe_provider_payload_text(data)}",
+                status_code=403,
             )
         if r.status_code >= 400:
             raise MSellerHTTPError(r.status_code, data)
@@ -104,7 +110,10 @@ class MSellerClient:
         # Prefer idToken; tolerate token/accessToken like the Odoo client does.
         token = _pick(data, "idToken", "token", "accessToken")
         if not token:
-            raise MSellerAuthError(f"Login OK but no token in response: {data}")
+            raise MSellerAuthError(
+                "Login OK but no token in response: "
+                f"{safe_provider_payload_text(data)}"
+            )
         self._token = token
         return token
 
@@ -133,10 +142,13 @@ class MSellerClient:
                 self.authenticate(force=True)   # token expired -> refresh, retry once
                 continue
             if r.status_code == 401:
-                raise MSellerAuthError(str(_safe_json(r)), status_code=401)
+                raise MSellerAuthError(
+                    safe_provider_payload_text(_safe_json(r)), status_code=401
+                )
             if r.status_code == 403:
                 raise MSellerAuthError(
-                    f"Invalid API key or permissions: {_safe_json(r)}",
+                    "Invalid API key or permissions: "
+                    f"{safe_provider_payload_text(_safe_json(r))}",
                     status_code=403,
                 )
             return r
@@ -157,10 +169,12 @@ class MSellerClient:
         data = _safe_json(r)
 
         if r.status_code == 401:
-            raise MSellerAuthError(str(data), status_code=401)
+            raise MSellerAuthError(safe_provider_payload_text(data), status_code=401)
         if r.status_code == 403:
             raise MSellerAuthError(
-                f"Invalid API key or permissions: {data}", status_code=403
+                "Invalid API key or permissions: "
+                f"{safe_provider_payload_text(data)}",
+                status_code=403,
             )
         # A validation failure comes back as 4xx with ECF_VALIDATION_FAILED — let the
         # caller inspect it rather than raising, since validate=true expects errors.
@@ -219,7 +233,8 @@ if __name__ == "__main__":
         password=os.environ["MSELLER_PASSWORD"],
         api_key=os.environ["MSELLER_API_KEY"],
     )
-    print("token:", client.authenticate()[:16], "...")
+    client.authenticate()
+    print("authentication: ok")
     # A validate round-trip consumes no eNCF — safe first call.
     sample = {"ECF": {"Encabezado": {"Version": "1.0"}}}
     print("validate:", client.send_document(sample, validate=True))

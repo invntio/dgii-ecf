@@ -1,0 +1,65 @@
+{
+ "app": "dgii_ecf",
+ "creation": "2026-07-17 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Workspace Sidebar",
+ "header_icon": "stamp",
+ "idx": 0,
+ "items": [
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "file-check",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "e-CF Documents",
+   "link_to": "ECF Document Log",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "list-ordered",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "e-CF Sequence Ranges",
+   "link_to": "ECF Sequence Range",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "settings",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Provider Settings",
+   "link_to": "ECF Provider Settings",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "key-round",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Gateway Account",
+   "link_to": "ECF Gateway Account",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-07-17 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "DGII ECF",
+ "name": "DGII ECF",
+ "owner": "Administrator",
+ "standard": 1,
+ "title": "DGII ECF"
+}

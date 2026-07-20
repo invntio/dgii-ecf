@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "autoname": "format:ECF-EVENT-{#####}",
+ "autoname": "ECF-EVENT-.#####",
  "creation": "2026-07-17 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -13,6 +13,7 @@
   "reference_doctype",
   "reference_name",
   "event_section",
+  "event_sequence",
   "event_type",
   "event_timestamp",
   "actor",
@@ -24,7 +25,10 @@
   "transport_section",
   "http_status",
   "error_kind",
-  "response_json"
+  "response_json",
+  "integrity_section",
+  "previous_event_hash",
+  "event_hash"
  ],
  "fields": [
   {
@@ -74,11 +78,20 @@
    "label": "Delivery Event"
   },
   {
+   "fieldname": "event_sequence",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Event Sequence",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
    "fieldname": "event_type",
-   "fieldtype": "Data",
+   "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Event Type",
+   "options": "OUTBOX_PREPARED\nPOST_STARTED\nPOST_RECEIVED\nREMOTE_STATUS\nREMOTE_NOT_FOUND\nREMOTE_ABSENCE_CONFIRMED\nRECONCILED\nBLOCKED_STATUS_NOT_FOUND\nSTALE_SUBMISSION\nDELIVERY_FAILED\nOPERATIONAL_ALERT\nALERT_DELIVERED\nALERT_FAILED\nRECOVERED\nMANUAL_RETRY\nBACKFILL",
    "reqd": 1
   },
   {
@@ -139,6 +152,27 @@
    "label": "Sanitized Response",
    "options": "JSON",
    "read_only": 1
+  },
+  {
+   "fieldname": "integrity_section",
+   "fieldtype": "Section Break",
+   "label": "Integrity"
+  },
+  {
+   "fieldname": "previous_event_hash",
+   "fieldtype": "Data",
+   "label": "Previous Event Hash",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "event_hash",
+   "fieldtype": "Data",
+   "label": "Event Hash",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1,
+   "unique": 1
   }
  ],
  "in_create": 0,

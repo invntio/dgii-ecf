@@ -20,14 +20,13 @@ fixtures = [
 jinja = {
     "methods": [
         "dgii_ecf.printing.get_ecf_print_data",
-        "dgii_ecf.printing.get_billing_property_print_data",
+        "dgii_ecf.printing.get_billing_reference_print_data",
         "dgii_ecf.printing.qr_svg_data_uri",
     ]
 }
 
 doctype_js = {
     "Sales Invoice": "public/js/sales_invoice.js",
-    "ECF Document Log": "public/js/ecf_document_log.js",
 }
 
 doc_events = {

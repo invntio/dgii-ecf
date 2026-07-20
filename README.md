@@ -65,6 +65,19 @@ The integration has two independent failure boundaries:
 No MSeller network request runs inside the invoice commit. The eNCF and outbox
 row are persisted first; external delivery happens in a background worker.
 
+### Frappe code layout
+
+- Owned DocTypes keep their Python controller, form/list JavaScript, and
+  DocType-specific helpers under `dgii_ecf/doctype/<doctype>/`; Frappe loads
+  these files by naming convention.
+- Native ERPNext `Sales Invoice` is extended explicitly through `doc_events`
+  and `doctype_js`; the app never shadows ERPNext's controller.
+- `api.py` orchestrates public fiscal commands, `delivery.py` owns the shared
+  delivery state machine/audit chain, `providers/` owns gateway contracts, and
+  `tasks.py` contains scheduler entry points.
+- Tests use Frappe 16's `UnitTestCase` and `IntegrationTestCase`; the deprecated
+  legacy test category is not used.
+
 ## Features
 
 - Concurrency-safe eNCF allocation with a database row lock.
@@ -136,6 +149,11 @@ company's `ECF Provider Settings`.
 ### 3. Per-company provider settings
 
 Create one `ECF Provider Settings` record per company:
+
+The **DGII ECF** sidebar exposes this list explicitly as **Provider Settings**;
+it is not dependent on Frappe's three-DocType automatic module limit. Access
+still follows the DocType permissions, so the platform-wide Gateway Account
+remains visible only to System Managers.
 
 - Provider: `MSeller`.
 - Environment: `TesteCF`, `CerteCF`, or production `eCF`.
@@ -247,10 +265,11 @@ automatic recovery and status synchronization.
 `ECF Document Log` is the source of truth for fiscal delivery. It stores:
 
 - Company, direction, source document, e-CF type, and eNCF.
-- Original/latest request JSON and provider response JSON.
+- Immutable original request JSON, request SHA-256, and sanitized provider response.
 - MSeller track ID, security code, QR URL, signed date, and signed XML path.
 - Submission count, last attempt, next retry, HTTP status, error class, and
   operator-facing error.
+- Append-only delivery events linked by a sequence and SHA-256 hash chain.
 
 Recommended operational views:
 
@@ -265,7 +284,8 @@ the database contains the durable fiscal request, response, and recovery state.
 MSeller currently exposes the signed XML path but not a public download endpoint.
 
 See [MSeller delivery resilience](docs/mseller-delivery-resilience.md) for the
-provider-confirmed behavior and contingency runbook.
+provider-confirmed behavior and [e-CF operations runbook](docs/ecf-operations-runbook.md)
+for diagnosis, alerts, safe retry, and audit verification.
 
 ## Security controls
 

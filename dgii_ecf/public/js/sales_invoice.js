@@ -30,6 +30,7 @@ async function add_ecf_actions(frm) {
 		args: { sales_invoice: frm.doc.name },
 	});
 	if (message?.log) {
+		show_ecf_operator_message(frm, message.presentation);
 		frm.add_custom_button(__("Open e-CF Log"), () => {
 			frappe.set_route("Form", "ECF Document Log", message.log.name);
 		}, __("Electronic Invoicing"));
@@ -60,6 +61,18 @@ async function add_ecf_actions(frm) {
 		frappe.show_alert({ message: __("e-CF retry was queued safely."), indicator: "green" });
 		frm.reload_doc();
 	}, __("Electronic Invoicing"));
+}
+
+function show_ecf_operator_message(frm, presentation) {
+	if (!presentation) return;
+	const provider_detail = presentation.provider_messages?.[0];
+	const detail = provider_detail
+		? `<br><small>${frappe.utils.escape_html(provider_detail)}</small>`
+		: "";
+	frm.dashboard.set_headline_alert(
+		`<strong>${frappe.utils.escape_html(presentation.title)}</strong><br>${frappe.utils.escape_html(presentation.message)}${detail}`,
+		presentation.indicator || "orange"
+	);
 }
 
 async function set_regional_print_format(frm) {

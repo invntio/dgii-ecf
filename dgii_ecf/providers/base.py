@@ -22,7 +22,7 @@ class EcfResult:
     success: bool
     status: str | None = None          # RECIBIDO/PROCESANDO/Aceptado/Rechazado/...
     encf: str | None = None
-    track_id: str | None = None        # MSeller internalTrackId
+    track_id: str | None = None        # provider tracking identifier
     security_code: str | None = None
     qr_url: str | None = None
     signed_date: str | None = None
@@ -33,6 +33,8 @@ class EcfResult:
 
 class EcfProvider(ABC):
     """Abstract e-CF gateway. `settings` is an `ECF Provider Settings` doc."""
+
+    status_batch_size = 100
 
     def __init__(self, settings):
         self.settings = settings

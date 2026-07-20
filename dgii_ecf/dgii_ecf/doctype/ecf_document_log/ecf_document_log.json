@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "autoname": "format:ECF-LOG-{#####}",
+ "autoname": "ECF-LOG-.#####",
  "creation": "2026-07-08 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -32,6 +32,9 @@
   "request_json",
   "request_sha256",
   "response_json",
+  "event_integrity_section",
+  "event_count",
+  "last_event_hash",
   "delivery_section",
   "attempt_count",
   "last_attempt_at",
@@ -216,6 +219,25 @@
    "read_only": 1
   },
   {
+   "collapsible": 1,
+   "fieldname": "event_integrity_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery Event Integrity"
+  },
+  {
+   "default": "0",
+   "fieldname": "event_count",
+   "fieldtype": "Int",
+   "label": "Delivery Event Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_event_hash",
+   "fieldtype": "Data",
+   "label": "Last Delivery Event Hash",
+   "read_only": 1
+  },
+  {
    "fieldname": "delivery_section",
    "fieldtype": "Section Break",
    "label": "Delivery"
@@ -271,7 +293,8 @@
    "fieldname": "next_status_check_at",
    "fieldtype": "Datetime",
    "label": "Next Status Check At",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "default": "0",

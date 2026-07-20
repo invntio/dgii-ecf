@@ -100,8 +100,13 @@ class ECFDocumentLog(Document):
             )
 
     def on_trash(self):
-        if frappe.db.exists("DocType", "ECF Delivery Event"):
-            frappe.db.delete("ECF Delivery Event", {"ecf_document_log": self.name})
+        if frappe.db.exists("ECF Delivery Event", {"ecf_document_log": self.name}):
+            frappe.throw(
+                _(
+                    "This fiscal delivery log has an audit history and cannot be deleted. "
+                    "Use the retention workflow instead."
+                )
+            )
 
 
 def _digits(value: str | None) -> str:

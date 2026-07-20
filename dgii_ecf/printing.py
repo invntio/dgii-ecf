@@ -8,6 +8,9 @@ import frappe
 from frappe.twofactor import get_qr_svg_code
 from frappe.utils import formatdate
 
+from dgii_ecf.providers.errors import sanitize_provider_text
+from dgii_ecf.delivery import ecf_operator_presentation
+
 _DOCUMENT_TITLES = {
     "31": "Electronic Fiscal Credit Invoice",
     "32": "Electronic Consumer Invoice",
@@ -45,34 +48,25 @@ def _company_address(company: str) -> str | None:
     return ", ".join(part for part in parts if part)
 
 
+def get_billing_reference_print_data(sales_invoice: str) -> frappe._dict | None:
+    """Return the first billing-reference extension supplied by a consumer app."""
+    for path in frappe.get_hooks("dgii_ecf_billing_reference_handlers") or []:
+        try:
+            value = frappe.get_attr(path)(sales_invoice)
+        except Exception:
+            frappe.log_error(
+                sanitize_provider_text(frappe.get_traceback())[:10000],
+                f"e-CF billing reference handler failed: {path}",
+            )
+            continue
+        if value:
+            return frappe._dict(value)
+    return None
+
+
 def get_billing_property_print_data(sales_invoice: str) -> frappe._dict | None:
-    """Return Bohío's condominium/unit label when that integration is installed.
-
-    ``dgii_ecf`` remains usable without Bohío Core: both the custom Sales Invoice
-    field and the Unit DocType are detected at runtime.  The condominium's fiscal
-    address is intentionally not returned here because it is already printed in
-    the issuer header; repeating it in the buyer block could imply that it is the
-    buyer's fiscal address.
-    """
-    invoice = frappe.get_doc("Sales Invoice", sales_invoice)
-    if not frappe.get_meta("Sales Invoice").has_field("bohio_billing_unit"):
-        return None
-
-    unit_name = invoice.get("bohio_billing_unit")
-    if not unit_name or not frappe.db.exists("DocType", "Unit"):
-        return None
-
-    unit = frappe.db.get_value(
-        "Unit", unit_name, ["unit_number", "company"], as_dict=True
-    )
-    if not unit or not unit.unit_number or unit.company != invoice.company:
-        return None
-
-    company = frappe.get_cached_doc("Company", invoice.company)
-    return frappe._dict(
-        unit_number=unit.unit_number,
-        condominium_name=company.company_name or invoice.company,
-    )
+    """Deprecated compatibility alias for the generic extension point."""
+    return get_billing_reference_print_data(sales_invoice)
 
 
 def _sequence_expiry_for(company: str, ecf_type: str, encf: str) -> str | None:
@@ -131,6 +125,7 @@ def get_ecf_print_data(sales_invoice: str) -> frappe._dict | None:
             "qr_url",
             "signed_date",
             "request_json",
+            "response_json",
         ],
         order_by="creation desc",
         limit=1,
@@ -167,6 +162,7 @@ def get_ecf_print_data(sales_invoice: str) -> frappe._dict | None:
             )
         )
 
+    operator_presentation = ecf_operator_presentation(log)
     return frappe._dict(
         log_name=log.name,
         title=_DOCUMENT_TITLES.get(log.ecf_type, "Electronic Fiscal Invoice"),
@@ -174,6 +170,9 @@ def get_ecf_print_data(sales_invoice: str) -> frappe._dict | None:
         encf=log.encf,
         status=log.status,
         error_kind=log.error_kind,
+        operator_presentation=(
+            frappe._dict(operator_presentation) if operator_presentation else None
+        ),
         security_code=log.security_code,
         qr_url=log.qr_url,
         signed_date=log.signed_date,
@@ -201,5 +200,17 @@ def qr_svg_data_uri(value: str | None) -> str:
     """Render a QR value with Frappe's bundled QR library as an inline SVG."""
     if not value:
         return ""
-    encoded_svg = get_qr_svg_code(value).decode("ascii")
+        
+    import pyqrcode
+    from io import BytesIO
+    from base64 import b64encode
+    
+    url = pyqrcode.create(value)
+    stream = BytesIO()
+    # Generamos el QR con fondo blanco puro y módulos negros para alto contraste
+    url.svg(stream, scale=4, background="#ffffff", module_color="#000000")
+    
+    svg = stream.getvalue().decode("utf-8").replace("\n", "")
+    encoded_svg = b64encode(svg.encode("utf-8")).decode("ascii")
+    
     return f"data:image/svg+xml;base64,{encoded_svg}"

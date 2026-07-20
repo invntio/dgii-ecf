@@ -1,11 +1,17 @@
-# Bohio <-> MSeller contingency design
+# DGII e-CF <-> MSeller contingency design
 
 Status: implemented
 
-This design covers the operational boundary between Bohio and MSeller. MSeller
-remains responsible for signing, transmitting to DGII, provider-side retries,
-and its certified fiscal contingency plan. Bohio is responsible for durable
-capture, safe delivery, status reconciliation, and clear operator visibility.
+This design covers the operational boundary between the provider-agnostic
+`dgii_ecf` app and MSeller. MSeller remains responsible for signing,
+transmitting to DGII, provider-side retries, and its certified fiscal
+contingency plan. `dgii_ecf` is responsible for durable capture, safe delivery,
+status reconciliation, and a generic operator-alert contract.
+
+The app does not import or know Bohío. A consuming application may register an
+alert handler and print-enrichment handler through Frappe hooks. Bohío currently
+implements those hooks to resolve the managers of the affected company and use
+its app, push, and email notification service.
 
 It deliberately does not implement a second DGII connector, OFV declarations,
 local signing, or the official DGII contingency legend. Those features should
@@ -180,6 +186,13 @@ Add an append-only `ECF Delivery Event` DocType:
 - sanitized provider response;
 - actor (`Scheduler`, worker, or user).
 
+Each event also carries a monotonically increasing sequence, the previous event
+hash, and its own SHA-256 hash. The parent log stores the event count and chain
+head. Inserts are restricted to the delivery service, updates/deletes are
+rejected, and parent logs with audit history cannot be deleted. The hash chain
+is tamper-evident; database-level immutable/WORM retention remains an optional
+infrastructure control rather than an application claim.
+
 The event log must never contain API keys, passwords, bearer tokens, or complete
 HTTP headers.
 
@@ -187,7 +200,7 @@ HTTP headers.
 
 | Condition | Notification |
 | --- | --- |
-| `UNCONFIRMED` for 15 minutes | Warning to Condo Manager/System Manager |
+| `UNCONFIRMED` for 15 minutes | Warning through the consumer alert hook |
 | No remote progress for 60 minutes | Critical alert with eNCF and last provider response |
 | `Rechazado` | Immediate one-time rejection notification |
 | Authentication/authorization error | Immediate configuration alert |
@@ -198,15 +211,21 @@ When a document enters `Rechazado` or `ERROR`:
 1. set `operator_action_required = 1`;
 2. clear `next_status_check_at` and `next_retry_at` so schedulers stop requesting
    that document;
-3. create one notification for every active Condo Manager assigned to the
-   document company, and one for System Managers only when the problem is a
-   platform/global credential failure;
+3. dispatch one provider-agnostic alert containing the company and document
+   references; the consumer resolves its business recipients;
 4. include Sales Invoice, eNCF, normalized cause, last provider message, and
    direct actions to open the invoice and e-CF log;
 5. deduplicate by e-CF log + blocked status + provider-response hash, so the
    same failure never generates repeated notifications;
 6. preserve the blocked state until an authorized user chooses Retry after
    correcting the underlying problem.
+
+If no consumer handler reports successful delivery, `dgii_ecf` falls back to a
+generic Frappe Desk notification for enabled System Managers and Administrator.
+In Bohío, the adapter sends Critical alerts by app + push + email, Warning alerts
+by app + push, and recovery notices in the app. All enabled Condo Managers with
+a Company User Permission receive the alert; this mapping remains entirely in
+Bohío.
 
 An explicit retry clears `operator_action_required`, records the user/action in
 `ECF Delivery Event`, and reconciles by eNCF before deciding whether another POST
@@ -278,25 +297,38 @@ An XML backup failure must never cause an accepted document to be resent.
 13. End-to-end outage drill: disconnect, submit, restore, reconcile, accept,
     and confirm one eNCF and one fiscal payload.
 
-## Delivery phases
+## Implementation status
 
-### Phase 1 — safe ambiguity handling
+### Implemented — safe ambiguity handling
 
 - Add request hash, absence observations, and delivery events.
 - Require two separated `found=false` responses before resend.
 - Centralize terminal-state protection and rejection notifications.
 
-### Phase 2 — adaptive synchronization and monitoring
+### Implemented — adaptive synchronization and monitoring
 
 - Add due-based batch polling.
 - Add aging alerts and provider health/circuit breaker.
 - Add manager-facing operational filters.
 
-### Phase 3 — operator workflow and drills
+### Implemented — operator workflow
 
-- Improve invoice actions and event timeline.
-- Add an automated outage/recovery integration test.
-- Publish a runbook for support and condominium managers.
+- Add list indicators, action-required shortcut, provider-health banner, and
+  delivery timeline navigation.
+- Publish the generic operations runbook and the Bohío recipient/channel map.
+
+### Pending external or deployment work
+
+- Run and record an end-to-end outage drill in a production-like environment;
+  unit/integration tests cannot prove Redis, worker, network, and MSeller behavior
+  together.
+- Download and retain signed XML when MSeller publishes a supported endpoint.
+- Obtain a formal MSeller SLA, authoritative rate-limit contract, and formal
+  contingency signal/endpoint if those become available.
+- Add database/WORM retention only if the organization's audit policy requires
+  immutability beyond the application-level hash chain and permission controls.
+- Add the official DGII contingency legend only after MSeller exposes an
+  authoritative contingency state and operating instructions.
 
 ## Definition of done
 
@@ -307,5 +339,8 @@ An XML backup failure must never cause an accepted document to be resent.
 - Operators receive actionable, deduplicated alerts for stalled and rejected
   documents.
 - Restarting Frappe, Redis, or workers does not lose or strand a fiscal payload.
-- Bohio relies on MSeller for signing, DGII transport, and formal fiscal
+- The deployment relies on MSeller for signing, DGII transport, and formal fiscal
   contingency, with no duplicated regulatory implementation.
+
+See [e-CF operations runbook](ecf-operations-runbook.md) for diagnosis,
+operator actions, notification channels, and recovery verification.

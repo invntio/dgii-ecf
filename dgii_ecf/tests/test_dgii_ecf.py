@@ -5,12 +5,12 @@ Collected by `bench run-tests`. The MSeller transport is mocked; no network.
 from unittest.mock import MagicMock, patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from dgii_ecf.events.sales_invoice import set_print_language
 from dgii_ecf.printing import (
     _sequence_expiry_for,
-    get_billing_property_print_data,
+    get_billing_reference_print_data,
     get_ecf_print_data,
     qr_svg_data_uri,
 )
@@ -23,6 +23,7 @@ from dgii_ecf.dgii_ecf.doctype.ecf_sequence_range.ecf_sequence_range import (
 )
 
 COMPANY = "ECF Test Co"
+SECOND_COMPANY = "ECF Test Buyer Two"
 
 
 def _invoice_log_filters(invoice: str) -> dict:
@@ -40,6 +41,16 @@ def _ensure_test_company():
         "doctype": "Company", "company_name": COMPANY, "abbr": "ETC",
         "default_currency": "DOP", "country": "Dominican Republic",
         "tax_id": "102320705",
+    }).insert(ignore_permissions=True)
+
+
+def _ensure_second_test_company():
+    if frappe.db.exists("Company", SECOND_COMPANY):
+        return
+    frappe.get_doc({
+        "doctype": "Company", "company_name": SECOND_COMPANY, "abbr": "ETB2",
+        "default_currency": "DOP", "country": "Dominican Republic",
+        "tax_id": "102320713",
     }).insert(ignore_permissions=True)
 
 
@@ -108,6 +119,33 @@ def _ensure_test_purchase_invoice():
     return invoice
 
 
+def _ensure_second_company_purchase_invoice():
+    _ensure_second_test_company()
+    _ensure_test_purchase_invoice()
+    supplier = "ECF Test Supplier"
+    name = frappe.db.get_value(
+        "Purchase Invoice",
+        {"company": SECOND_COMPANY, "supplier": supplier},
+        "name",
+    )
+    if name:
+        return frappe.get_doc("Purchase Invoice", name)
+    invoice = frappe.get_doc(
+        {
+            "doctype": "Purchase Invoice",
+            "company": SECOND_COMPANY,
+            "supplier": supplier,
+            "bill_no": "ECF-TEST-PURCHASE-SECOND-COMPANY",
+            "bill_date": frappe.utils.today(),
+            "items": [
+                {"item_code": "ECF-TEST-SERVICE", "qty": 1, "rate": 700}
+            ],
+        }
+    )
+    invoice.insert(ignore_permissions=True)
+    return invoice
+
+
 def _fake_settings():
     s = MagicMock()
     s.environment = "TesteCF"
@@ -117,7 +155,7 @@ def _fake_settings():
     return s
 
 
-class TestPrinting(FrappeTestCase):
+class TestPrinting(IntegrationTestCase):
     def setUp(self):
         frappe.set_user("Administrator")
         self.si = _ensure_test_invoice()
@@ -186,6 +224,47 @@ class TestPrinting(FrappeTestCase):
         self.assertTrue(data_uri.startswith("data:image/svg+xml;base64,"))
         self.assertEqual(qr_svg_data_uri(None), "")
 
+    def test_print_data_marks_dgii_004_as_temporary_validation_error(self):
+        frappe.get_doc(
+            {
+                "doctype": "ECF Document Log",
+                "company": COMPANY,
+                **_invoice_log_filters(self.si.name),
+                "ecf_type": "32",
+                "encf": "E320000088889",
+                "status": "Rechazado",
+                "request_json": frappe.as_json({"ECF": {}}),
+                "response_json": frappe.as_json(
+                    {
+                        "data": {
+                            "dgiiResponse": [
+                                frappe.as_json(
+                                    {
+                                        "estado": "Rechazado",
+                                        "mensajes": [
+                                            {
+                                                "codigo": "004",
+                                                "valor": "Ha ocurrido un error validando en eCF, favor intentar nueva vez.",
+                                            }
+                                        ],
+                                        "secuenciaUtilizada": False,
+                                    }
+                                )
+                            ]
+                        }
+                    }
+                ),
+            }
+        ).insert(ignore_permissions=True)
+
+        data = get_ecf_print_data(self.si.name)
+
+        self.assertEqual(data.status, "Rechazado")
+        self.assertEqual(
+            data.operator_presentation.kind, "temporary_validation_error"
+        )
+        self.assertEqual(data.operator_presentation.indicator, "orange")
+
     def test_submitted_invoice_without_ecf_renders_blocking_fiscal_warning(self):
         html = frappe.render_template(
             "dgii_ecf/templates/print_formats/dominican_sales_invoice.html",
@@ -208,32 +287,23 @@ class TestPrinting(FrappeTestCase):
         self.assertIn('class="ri-notice"', html)
         self.assertIn("Draft preview", html)
 
-    def test_billing_property_is_optional_without_bohio_custom_field(self):
-        meta = MagicMock()
-        meta.has_field.return_value = False
-        with patch.object(frappe, "get_meta", return_value=meta):
-            self.assertIsNone(get_billing_property_print_data(self.si.name))
+    def test_billing_reference_is_optional_without_consumer_hook(self):
+        with patch.object(frappe, "get_hooks", return_value=[]):
+            self.assertIsNone(get_billing_reference_print_data(self.si.name))
 
-    def test_billing_property_uses_unit_and_invoice_company(self):
-        invoice = frappe._dict(
-            company=COMPANY,
-            bohio_billing_unit="UT-ECF-TEST-A-101",
+    def test_billing_reference_uses_generic_consumer_hook(self):
+        handler = MagicMock(
+            return_value={"label": "Billing Reference", "value": "A-101"}
         )
-        meta = MagicMock()
-        meta.has_field.return_value = True
-        company = frappe._dict(company_name="Condominio Elegante")
-        unit = frappe._dict(unit_number="A-101", company=COMPANY)
         with (
-            patch.object(frappe, "get_doc", return_value=invoice),
-            patch.object(frappe, "get_meta", return_value=meta),
-            patch.object(frappe.db, "exists", return_value=True),
-            patch.object(frappe.db, "get_value", return_value=unit),
-            patch.object(frappe, "get_cached_doc", return_value=company),
+            patch.object(frappe, "get_hooks", return_value=["consumer.reference"]),
+            patch.object(frappe, "get_attr", return_value=handler),
         ):
-            data = get_billing_property_print_data("SINV-TEST")
+            data = get_billing_reference_print_data("SINV-TEST")
 
-        self.assertEqual(data.unit_number, "A-101")
-        self.assertEqual(data.condominium_name, "Condominio Elegante")
+        handler.assert_called_once_with("SINV-TEST")
+        self.assertEqual(data.label, "Billing Reference")
+        self.assertEqual(data.value, "A-101")
 
     def test_sequence_expiry_comes_from_the_range_containing_the_encf(self):
         with patch.object(
@@ -268,7 +338,7 @@ class TestPrinting(FrappeTestCase):
         self.assertEqual(doc.language, "fr")
 
 
-class TestReadiness(FrappeTestCase):
+class TestReadiness(IntegrationTestCase):
     def test_submit_error_lists_each_missing_field(self):
         problems = {
             "ready": False,
@@ -327,7 +397,7 @@ class TestReadiness(FrappeTestCase):
         self.assertIn("ECF Provider", str(exc.exception))
 
 
-class TestMSellerProviderMapping(FrappeTestCase):
+class TestMSellerProviderMapping(IntegrationTestCase):
     """MSeller JSON -> normalized EcfResult (the swap-layer contract)."""
 
     def test_send_maps_submission_response(self):
@@ -411,7 +481,7 @@ class TestMSellerProviderMapping(FrappeTestCase):
         self.assertEqual(res.status, "PROCESANDO")
 
 
-class TestSequenceHandout(FrappeTestCase):
+class TestSequenceHandout(IntegrationTestCase):
     """get_next_encf: format, monotonicity, exhaustion, no duplicates."""
 
     def setUp(self):
@@ -460,7 +530,7 @@ def _a_submitted_invoice():
     return _ensure_test_invoice()
 
 
-class TestBuilder(FrappeTestCase):
+class TestBuilder(IntegrationTestCase):
     """Sales Invoice -> ECF JSON: per-type sections and header correctness."""
 
     def setUp(self):
@@ -537,8 +607,32 @@ class TestBuilder(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             build_ecf_json(nota, "E330000000002", "33")
 
+    def test_type34_credit_note_references_original_ecf(self):
+        """Credit notes are generic ERPNext corrections, not Bohío logic."""
+        from dgii_ecf.ecf.builder import build_ecf_json, pick_ecf_type
 
-class TestPolling(FrappeTestCase):
+        frappe.db.delete("ECF Document Log", _invoice_log_filters(self.si.name))
+        frappe.get_doc({
+            "doctype": "ECF Document Log", "company": COMPANY,
+            **_invoice_log_filters(self.si.name), "ecf_type": "32",
+            "encf": "E329999999901", "status": "Aceptado",
+        }).insert(ignore_permissions=True)
+
+        nota = frappe.get_doc("Sales Invoice", self.si.name)
+        nota.is_return = 1
+        nota.is_debit_note = 0
+        nota.return_against = self.si.name
+
+        self.assertEqual(pick_ecf_type(nota), "34")
+        doc = build_ecf_json(nota, "E340000000001", "34")
+        self.assertEqual(
+            doc["ECF"]["InformacionReferencia"]["NCFModificado"],
+            "E329999999901",
+        )
+        self.assertNotIn("Paginacion", doc["ECF"])
+
+
+class TestPolling(IntegrationTestCase):
     """Scheduler poll: batch status updates the log and stops at terminal states."""
 
     def setUp(self):
@@ -573,7 +667,7 @@ class TestPolling(FrappeTestCase):
         )
 
 
-class TestFiscalHardening(FrappeTestCase):
+class TestFiscalHardening(IntegrationTestCase):
     """Half-up money rounding, RNC cleaning, and the cancel guard."""
 
     def setUp(self):
@@ -627,7 +721,7 @@ class TestFiscalHardening(FrappeTestCase):
             frappe.db.delete("ECF Document Log", _invoice_log_filters(self.si.name))
 
 
-class TestDocumentLogReference(FrappeTestCase):
+class TestDocumentLogReference(IntegrationTestCase):
     def setUp(self):
         frappe.set_user("Administrator")
         self.purchase_invoice = _ensure_test_purchase_invoice()
@@ -673,8 +767,83 @@ class TestDocumentLogReference(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             frappe.get_doc(values).insert(ignore_permissions=True)
 
+    def test_shared_supplier_can_have_separate_received_documents_per_company(self):
+        second_invoice = _ensure_second_company_purchase_invoice()
+        encfs = ("E310000077778", "E310000077779")
+        frappe.db.delete("ECF Document Log", {"encf": ["in", encfs]})
+        try:
+            first = frappe.get_doc(
+                {
+                    "doctype": "ECF Document Log",
+                    "company": COMPANY,
+                    "direction": "Received",
+                    "reference_doctype": "Purchase Invoice",
+                    "reference_name": self.purchase_invoice.name,
+                    "ecf_type": "31",
+                    "encf": encfs[0],
+                    "issuer_tax_id": "131000001",
+                    "status": "RECIBIDO",
+                }
+            ).insert(ignore_permissions=True)
+            second = frappe.get_doc(
+                {
+                    "doctype": "ECF Document Log",
+                    "company": SECOND_COMPANY,
+                    "direction": "Received",
+                    "reference_doctype": "Purchase Invoice",
+                    "reference_name": second_invoice.name,
+                    "ecf_type": "31",
+                    "encf": encfs[1],
+                    "issuer_tax_id": "131000001",
+                    "status": "RECIBIDO",
+                }
+            ).insert(ignore_permissions=True)
 
-class TestCredentialResolution(FrappeTestCase):
+            self.assertEqual(self.purchase_invoice.supplier, second_invoice.supplier)
+            self.assertEqual(first.company, COMPANY)
+            self.assertEqual(second.company, SECOND_COMPANY)
+        finally:
+            frappe.db.delete("ECF Document Log", {"encf": ["in", encfs]})
+
+    def test_received_fiscal_link_is_independent_of_purchase_payment_state(self):
+        encfs = ("E310000077780", "E310000077781")
+        frappe.db.delete("ECF Document Log", {"encf": ["in", encfs]})
+        original_outstanding = self.purchase_invoice.outstanding_amount
+        try:
+            for encf, outstanding in zip(encfs, (500, 0), strict=True):
+                frappe.db.set_value(
+                    "Purchase Invoice",
+                    self.purchase_invoice.name,
+                    "outstanding_amount",
+                    outstanding,
+                    update_modified=False,
+                )
+                log = frappe.get_doc(
+                    {
+                        "doctype": "ECF Document Log",
+                        "company": COMPANY,
+                        "direction": "Received",
+                        "reference_doctype": "Purchase Invoice",
+                        "reference_name": self.purchase_invoice.name,
+                        "ecf_type": "31",
+                        "encf": encf,
+                        "issuer_tax_id": "131000001",
+                        "status": "RECIBIDO",
+                    }
+                ).insert(ignore_permissions=True)
+                self.assertEqual(log.reference_name, self.purchase_invoice.name)
+        finally:
+            frappe.db.set_value(
+                "Purchase Invoice",
+                self.purchase_invoice.name,
+                "outstanding_amount",
+                original_outstanding,
+                update_modified=False,
+            )
+            frappe.db.delete("ECF Document Log", {"encf": ["in", encfs]})
+
+
+class TestCredentialResolution(IntegrationTestCase):
     """Platform gateway login + per-company/per-environment API keys."""
 
     def setUp(self):

@@ -21,6 +21,7 @@
   "provider_health_section",
   "circuit_state",
   "circuit_open_until",
+  "circuit_probe_expires_at",
   "consecutive_failures",
   "column_break_provider_health",
   "failure_window_started_at",
@@ -123,6 +124,12 @@
    "fieldname": "circuit_open_until",
    "fieldtype": "Datetime",
    "label": "Circuit Open Until",
+   "read_only": 1
+  },
+  {
+   "fieldname": "circuit_probe_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Circuit Probe Lease Expires At",
    "read_only": 1
   },
   {

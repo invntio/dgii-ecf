@@ -1,7 +1,9 @@
 # MSeller delivery resilience
 
-The production-hardening design that extends this runbook is documented in
-[Bohio <-> MSeller contingency design](mseller-contingency-design.md).
+The production-hardening design is documented in
+[DGII e-CF <-> MSeller contingency design](mseller-contingency-design.md). See
+the [e-CF operations runbook](ecf-operations-runbook.md) for operator actions,
+alert channels, and audit verification.
 
 This app treats Frappe-to-MSeller delivery and MSeller-to-DGII processing as
 separate failure boundaries.

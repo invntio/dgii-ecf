@@ -1,161 +1,264 @@
 {% set fiscal = get_ecf_print_data(doc.name) %}
-{% set property = get_billing_property_print_data(doc.name) %}
+{% set billing_reference = get_billing_reference_print_data(doc.name) %}
 <style>
-  .ri { color: #172033; font-family: Arial, sans-serif; font-size: 10px; line-height: 1.25; }
-  .ri-header { display: table; margin-bottom: 12px; width: 100%; }
-  .ri-issuer, .ri-document { display: table-cell; vertical-align: top; width: 50%; }
-  .ri-document { color: #164f86; text-align: right; }
-  .ri-logo { max-height: 54px; max-width: 150px; margin-bottom: 5px; }
-  .ri-company { color: #164f86; font-size: 16px; font-weight: 700; }
-  .ri-document h1 { font-size: 15px; margin: 0 0 5px; }
-  .ri-rule { border-top: 2px solid #3e94d1; margin: 10px 0; }
-  .ri-party { font-size: 11px; line-height: 1.45; padding: 2px 0; }
-  .ri-table { border-collapse: collapse; width: 100%; }
-  .ri-table thead { display: table-header-group; }
-  .ri-table th { background: #b9bec5; border: 1px solid #858d98; color: #374151; font-weight: 700; padding: 5px 4px; text-align: center; }
-  .ri-table td { border: 1px solid #b6bcc5; padding: 5px 4px; }
-  .ri-table .number { text-align: right; white-space: nowrap; }
-  .ri-table .center { text-align: center; }
-  .ri-summary { display: table; margin-top: 12px; page-break-inside: avoid; width: 100%; }
-  .ri-verification, .ri-totals { display: table-cell; vertical-align: top; width: 50%; }
-  .ri-qr { height: 92px; width: 92px; }
-  .ri-verification { line-height: 1.45; }
-  .ri-totals { padding-left: 30px; }
-  .ri-total-row { display: table; width: 100%; }
-  .ri-total-label, .ri-total-value { display: table-cell; padding: 3px 5px; }
-  .ri-total-label { font-weight: 700; text-align: right; width: 60%; }
-  .ri-total-value { border: 1px solid #aab0b8; text-align: right; width: 40%; }
-  .ri-total-final { font-size: 11px; }
-  .ri-notice { background: #eff6ff; border: 1px solid #60a5fa; margin: 12px 0; padding: 8px; }
-  .ri-warning { background: #fff7ed; border: 1px solid #fb923c; margin: 12px 0; padding: 8px; }
-  .ri-danger { background: #fef2f2; border: 2px solid #dc2626; color: #7f1d1d; margin: 12px 0; padding: 9px; }
-  .ri-message-title { display: block; font-size: 11px; margin-bottom: 3px; text-transform: uppercase; }
-  .ri-footer { bottom: 8mm; color: #4b5563; font-size: 8px; margin-top: 30px; }
-  .ri-reference { font-weight: 700; margin-top: 4px; }
+  @page { margin: 10mm; }
+  * { box-sizing: border-box; }
+  body { 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+    font-size: 10px; 
+    color: #374151; 
+    margin: 0; 
+    padding: 0; 
+    line-height: 1.3;
+  }
+  
+  /* Utilities */
+  .clearfix { overflow: hidden; }
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+  .text-left { text-align: left; }
+  .font-bold { font-weight: 700; }
+  
+  /* Header */
+  .header-area { margin-bottom: 12px; }
+  .logo { max-height: 50px; max-width: 160; margin-bottom: 4px; }
+  .company-name { color: #111827; font-size: 16px; font-weight: 700; margin-bottom: 3px; }
+  .doc-title { color: #2563eb; font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  
+  /* Client Info */
+  .client-box { 
+    border: 1px solid #e5e7eb; 
+    border-radius: 6px; 
+    padding: 10px 14px; 
+    margin-bottom: 15px; 
+    font-size: 11px;
+    background: #ffffff;
+  }
+  .client-row { margin-bottom: 3px; }
+  .client-row:last-child { margin-bottom: 0; }
+  
+  /* Product Table */
+  .table-container { 
+    border: 1px solid #e5e7eb; 
+    border-radius: 6px; 
+    overflow: hidden; 
+    margin-bottom: 15px; 
+  }
+  .product-table { 
+    width: 100%; 
+    border-collapse: separate; 
+    border-spacing: 0; 
+  }
+  .product-table th { 
+    background: #f8fafc; 
+    color: #111827; 
+    font-weight: 700; 
+    padding: 10px 10px; 
+    border-bottom: 1px solid #e5e7eb; 
+    border-right: 1px solid #e5e7eb; 
+    vertical-align: middle;
+  }
+  .product-table td { 
+    padding: 8px 10px; 
+    border-bottom: 1px solid #e5e7eb; 
+    border-right: 1px solid #e5e7eb; 
+  }
+  .product-table th:last-child, .product-table td:last-child { border-right: none; }
+  .product-table tr:last-child td { border-bottom: none; }
+  
+  /* Alerts */
+  .alert { border-radius: 6px; margin: 10px 0; padding: 10px 12px; }
+  .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; color: #1e40af; }
+  .alert-warn { background: #fffbe6; border: 1px solid #ffe58f; border-left: 4px solid #f59e0b; color: #92400e; }
+  .alert-danger { background: #fef2f2; border: 1px solid #fca5a5; border-left: 4px solid #ef4444; color: #991b1b; }
+  .alert-title { display: block; font-size: 10px; font-weight: 700; margin-bottom: 2px; text-transform: uppercase; }
+
   @media print {
-    .ri-summary, .ri-table tr { break-inside: avoid; page-break-inside: avoid; }
+    .product-table tr { break-inside: avoid; page-break-inside: avoid; }
+    .summary-area { break-inside: avoid; page-break-inside: avoid; }
   }
 </style>
 
-<div class="ri">
-  <div class="ri-header">
-    <div class="ri-issuer">
-      {% if fiscal and fiscal.company_logo %}<img class="ri-logo" src="{{ fiscal.company_logo }}">{% endif %}
-      <div class="ri-company">{{ fiscal.issuer_name if fiscal else doc.company }}</div>
-      {% if fiscal and fiscal.issuer_rnc %}<div><strong>{{ _("RNC") }}:</strong> {{ fiscal.issuer_rnc }}</div>{% endif %}
-      {% if fiscal and fiscal.issuer_address %}<div><strong>{{ _("Address") }}:</strong> {{ fiscal.issuer_address }}</div>{% endif %}
-      <div><strong>{{ _("Issue Date") }}:</strong> {{ fiscal.issue_date if fiscal else frappe.format(doc.posting_date, {"fieldtype": "Date"}) }}</div>
+<div>
+  <!-- Header -->
+  <div class="clearfix header-area">
+    <div style="float: left; width: 50%;">
+      {% if fiscal and fiscal.company_logo %}<img class="logo" src="{{ fiscal.company_logo }}">{% endif %}
+      <div class="company-name">{{ fiscal.issuer_name if fiscal else doc.company }}</div>
+      <div style="color: #4b5563; line-height: 1.3;">
+        {% if fiscal and fiscal.issuer_rnc %}<div><strong>{{ _("RNC") }}:</strong> {{ fiscal.issuer_rnc }}</div>{% endif %}
+        {% if fiscal and fiscal.issuer_address %}<div>{{ fiscal.issuer_address }}</div>{% endif %}
+        <div><strong>{{ _("Fecha Emisión") }}:</strong> {{ fiscal.issue_date if fiscal else frappe.format(doc.posting_date, {"fieldtype": "Date"}) }}</div>
+      </div>
     </div>
-    <div class="ri-document">
-      <h1>{{ _(fiscal.title) if fiscal else _("Invoice") }}</h1>
-      {% if fiscal %}
-        <div><strong>{{ _("e-NCF") }}:</strong> {{ fiscal.encf }}</div>
-        <div><strong>{{ _("e-CF Status") }}:</strong> {{ fiscal.status }}</div>
-        {% if fiscal.sequence_expiry %}<div><strong>{{ _("Sequence Expiry Date") }}:</strong> {{ fiscal.sequence_expiry }}</div>{% endif %}
-        {% if fiscal.modified_encf %}<div class="ri-reference"><strong>{{ _("Modified NCF") }}:</strong> {{ fiscal.modified_encf }}</div>{% endif %}
-        {% if fiscal.correction_reason %}<div>{{ fiscal.correction_reason }}</div>{% endif %}
-      {% else %}
-        <div>{{ doc.name }}</div>
-      {% endif %}
+    <div class="text-right" style="float: right; width: 50%;">
+      <h1 class="doc-title">{{ _(fiscal.title) if fiscal else _("Factura de Consumo Electrónica") }}</h1>
+      <div style="color: #374151; line-height: 1.35;">
+        {% if fiscal %}
+          <div><strong>{{ _("e-NCF") }}:</strong> {{ fiscal.encf }}</div>
+          {% if fiscal.status %}<div><strong>{{ _("Estado e-CF") }}:</strong> {{ fiscal.status }}</div>{% endif %}
+          {% if fiscal.sequence_expiry %}<div><strong>{{ _("Fecha de Vencimiento") }}:</strong> {{ fiscal.sequence_expiry }}</div>{% endif %}
+          {% if fiscal.modified_encf %}<div style="margin-top: 2px;"><strong>{{ _("NCF Modificado") }}:</strong> {{ fiscal.modified_encf }}</div>{% endif %}
+          {% if fiscal.correction_reason %}<div>{{ fiscal.correction_reason }}</div>{% endif %}
+        {% else %}
+          <div>{{ doc.name }}</div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
-  <div class="ri-rule"></div>
-  <div class="ri-party">
-    <div><strong>{{ _("Customer Legal Name") }}:</strong> {{ fiscal.buyer_name if fiscal else (doc.customer_name or doc.customer) }}</div>
-    {% if fiscal and fiscal.buyer_rnc and fiscal.buyer_rnc != "00000000000" %}<div><strong>{{ _("Customer RNC") }}:</strong> {{ fiscal.buyer_rnc }}</div>{% endif %}
-    {% if property %}<div><strong>{{ _("Billed Unit") }}:</strong> {{ property.unit_number }} · {{ property.condominium_name }}</div>{% endif %}
-  </div>
-  <div class="ri-rule"></div>
+  <div style="border-bottom: 2px solid #2563eb; margin-bottom: 12px;"></div>
 
+  <!-- Client Box -->
+  <div class="client-box">
+    <div class="client-row"><strong>{{ _("Razón Social Cliente") }}:</strong> {{ fiscal.buyer_name if fiscal else (doc.customer_name or doc.customer) }}</div>
+    {% if fiscal and fiscal.buyer_rnc and fiscal.buyer_rnc != "00000000000" %}<div class="client-row"><strong>{{ _("RNC Cliente") }}:</strong> {{ fiscal.buyer_rnc }}</div>{% endif %}
+    {% if billing_reference %}<div class="client-row"><strong>{{ _(billing_reference.label) }}:</strong> {{ billing_reference.value }}</div>{% endif %}
+  </div>
+
+  <!-- Status Alerts -->
   {% set pending_statuses = ("Pending", "SUBMITTING", "UNCONFIRMED", "RECIBIDO", "PROCESANDO") %}
+  {% set temporary_validation_error = fiscal and fiscal.operator_presentation and fiscal.operator_presentation.kind == "temporary_validation_error" %}
   {% set invalid_fiscal = fiscal and (fiscal.status == "Rechazado" or (fiscal.status == "ERROR" and fiscal.error_kind == "Validation")) %}
+  
   {% if not fiscal and doc.docstatus == 0 %}
-    <div class="ri-notice">
-      <strong class="ri-message-title">{{ _("Draft preview") }}</strong>
-      {{ _("The e-CF and its fiscal identifiers will be generated when this invoice is submitted.") }}
+    <div class="alert alert-info">
+      <span class="alert-title">{{ _("Vista previa de borrador") }}</span>
+      {{ _("El e-CF y sus identificadores fiscales se generarán al enviar esta factura.") }}
     </div>
   {% elif not fiscal %}
-    <div class="ri-danger">
-      <strong class="ri-message-title">{{ _("Electronic fiscal receipt missing") }}</strong>
-      {{ _("This submitted invoice has no e-CF and must not be delivered as a fiscal receipt. Configure electronic invoicing and regularize the invoice before issuing it to the customer.") }}
+    <div class="alert alert-danger">
+      <span class="alert-title">{{ _("Comprobante fiscal electrónico faltante") }}</span>
+      {{ _("Esta factura enviada no tiene e-CF y no debe entregarse como comprobante fiscal.") }}
+    </div>
+  {% elif temporary_validation_error %}
+    <div class="alert alert-warn">
+      <span class="alert-title">{{ _(fiscal.operator_presentation.title) }}</span>
+      {{ _(fiscal.operator_presentation.message) }}
+      {% if fiscal.operator_presentation.provider_messages %}
+        <div><strong>{{ _("Respuesta DGII") }}:</strong> {{ fiscal.operator_presentation.provider_messages[0] }}</div>
+      {% endif %}
     </div>
   {% elif invalid_fiscal %}
-    <div class="ri-danger">
-      <strong class="ri-message-title">{{ _("Electronic fiscal receipt rejected") }}</strong>
-      {{ _("This e-CF was rejected or failed fiscal validation and is not valid for fiscal purposes.") }}
+    <div class="alert alert-danger">
+      <span class="alert-title">{{ _("Comprobante fiscal electrónico rechazado") }}</span>
+      {{ _("Este e-CF fue rechazado o falló la validación fiscal y no es válido para fines fiscales.") }}
     </div>
   {% elif fiscal.status in pending_statuses or fiscal.status == "ERROR" %}
-    <div class="ri-warning">
-      <strong class="ri-message-title">{{ _("Electronic fiscal receipt pending") }}</strong>
-      {{ _("The e-CF was generated, but its transmission or DGII validation is still pending. Verify its final status before using it for fiscal purposes.") }}
+    <div class="alert alert-warn">
+      <span class="alert-title">{{ _("Comprobante fiscal electrónico pendiente") }}</span>
+      {{ _("El e-CF fue generado, pero su transmisión o validación en la DGII está pendiente.") }}
     </div>
   {% endif %}
 
-  <table class="ri-table">
-    <thead>
-      <tr>
-        <th>{{ _("Quantity") }}</th>
-        <th>{{ _("Description") }}</th>
-        <th>{{ _("Unit of Measure") }}</th>
-        <th>{{ _("Price") }}</th>
-        <th>{{ _("ITBIS") }}</th>
-        <th>{{ _("Value") }}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if fiscal %}
-        {% for item in fiscal.lines %}
+  <!-- Product Table -->
+  <div class="table-container">
+    <table class="product-table">
+      <thead>
         <tr>
-          <td class="center">{{ item.quantity }}</td>
-          <td>{{ item.description }}</td>
-          <td class="center">{{ item.uom }}</td>
-          <td class="number">{{ frappe.format(item.rate, {"fieldtype": "Currency", "options": fiscal.currency}) }}</td>
-          <td class="number">{{ frappe.format(item.tax, {"fieldtype": "Currency", "options": fiscal.currency}) }}</td>
-          <td class="number">{{ frappe.format(item.amount, {"fieldtype": "Currency", "options": fiscal.currency}) }}</td>
+          <th class="text-center" style="width: 8%;">{{ _("Cantidad") }}</th>
+          <th class="text-left" style="width: 32%;">{{ _("Descripción") }}</th>
+          <th class="text-center" style="width: 10%;">{{ _("Unidad") }}</th>
+          <th class="text-right" style="width: 12%;">{{ _("Precio") }}</th>
+          <th class="text-right" style="width: 19%;">{{ _("ITBIS") }}</th>
+          <th class="text-right" style="width: 19%;">{{ _("Valor") }}</th>
         </tr>
-        {% endfor %}
-      {% else %}
-        {% for item in doc.items %}
-        <tr>
-          <td class="center">{{ item.qty }}</td>
-          <td>{{ item.item_name or item.item_code }}</td>
-          <td class="center">{{ item.uom }}</td>
-          <td class="number">{{ frappe.format(item.net_rate, {"fieldtype": "Currency", "options": doc.currency}) }}</td>
-          <td class="number">—</td>
-          <td class="number">{{ frappe.format(item.net_amount, {"fieldtype": "Currency", "options": doc.currency}) }}</td>
-        </tr>
-        {% endfor %}
-      {% endif %}
-    </tbody>
-  </table>
-  <div class="ri-rule"></div>
+      </thead>
+      <tbody>
+        {% if fiscal %}
+          {% for item in fiscal.lines %}
+          <tr>
+            <td class="text-center">{{ (item.quantity | int) if (item.quantity % 1 == 0) else item.quantity }}</td>
+            <td class="text-left">{{ item.description }}</td>
+            <td class="text-center">{{ item.uom }}</td>
+            <td class="text-right" style="white-space: nowrap;">{{ frappe.format(item.rate, {"fieldtype": "Currency", "options": fiscal.currency}) }}</td>
+            <td class="text-right" style="white-space: nowrap;">{{ frappe.format(item.tax, {"fieldtype": "Currency", "options": fiscal.currency}) }}</td>
+            <td class="text-right" style="white-space: nowrap;">{{ frappe.format(item.amount, {"fieldtype": "Currency", "options": fiscal.currency}) }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          {% for item in doc.items %}
+          <tr>
+            <td class="text-center">{{ (item.qty | int) if (item.qty % 1 == 0) else item.qty }}</td>
+            <td class="text-left">{{ item.item_name or item.item_code }}</td>
+            <td class="text-center">{{ item.uom }}</td>
+            <td class="text-right" style="white-space: nowrap;">{{ frappe.format(item.net_rate, {"fieldtype": "Currency", "options": doc.currency}) }}</td>
+            <td class="text-right">—</td>
+            <td class="text-right" style="white-space: nowrap;">{{ frappe.format(item.net_amount, {"fieldtype": "Currency", "options": doc.currency}) }}</td>
+          </tr>
+          {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
 
-  <div class="ri-summary">
-    <div class="ri-verification">
+  <!-- Summary Section (QR + Totals) -->
+  <!-- 
+    Layout Note for wkhtmltopdf:
+    We use standard floats. 
+    Left container is 62% (8+32+10+12). Right container is 38% (19+19).
+    This perfectly matches the table columns without using complex nested tables.
+  -->
+  <div class="clearfix summary-area">
+    <!-- QR Area -->
+    <div style="float: left; width: 55%;">
       {% if fiscal and fiscal.qr_url %}
-        <img class="ri-qr" src="{{ qr_svg_data_uri(fiscal.qr_url) }}" alt="{{ _("DGII verification QR code") }}">
-        <div><strong>{{ _("Security Code") }}:</strong> {{ fiscal.security_code }}</div>
-        <div><strong>{{ _("Digital Signature Date") }}:</strong> {{ fiscal.signed_date }}</div>
+        <div style="width: 160px; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; text-align: center; background: #ffffff;">
+          <img src="{{ qr_svg_data_uri(fiscal.qr_url) }}" alt="{{ _("Código QR de verificación DGII") }}" style="height: 130px; width: 130px; display: block; margin: 0 auto 8px;">
+          <div style="font-size: 10px; color: #4b5563; line-height: 1.4;">
+            <div><strong style="color: #111827;">{{ _("Código de Seguridad") }}:</strong><br>{{ fiscal.security_code }}</div>
+            <div style="margin-top: 4px;"><strong style="color: #111827;">{{ _("Fecha Firma") }}:</strong><br>{{ fiscal.signed_date }}</div>
+          </div>
+        </div>
       {% endif %}
     </div>
-    <div class="ri-totals">
+
+    <!-- Totals Area -->
+    <div style="float: right; width: 45%;">
       {% set currency = fiscal.currency if fiscal else doc.currency %}
       {% set taxable = fiscal.taxable_total if fiscal else doc.net_total %}
       {% set taxes = fiscal.tax_total if fiscal else doc.total_taxes_and_charges %}
       {% set total = fiscal.grand_total if fiscal else doc.grand_total %}
-      <div class="ri-total-row"><span class="ri-total-label">{{ _("Taxable Subtotal") }}:</span><span class="ri-total-value">{{ frappe.format(taxable, {"fieldtype": "Currency", "options": currency}) }}</span></div>
-      {% if fiscal and fiscal.exempt_total %}<div class="ri-total-row"><span class="ri-total-label">{{ _("Exempt Subtotal") }}:</span><span class="ri-total-value">{{ frappe.format(fiscal.exempt_total, {"fieldtype": "Currency", "options": currency}) }}</span></div>{% endif %}
-      <div class="ri-total-row"><span class="ri-total-label">{{ _("Total ITBIS") }}:</span><span class="ri-total-value">{{ frappe.format(taxes, {"fieldtype": "Currency", "options": currency}) }}</span></div>
-      <div class="ri-total-row ri-total-final"><span class="ri-total-label">{{ _("Total") }}:</span><span class="ri-total-value"><strong>{{ frappe.format(total, {"fieldtype": "Currency", "options": currency}) }}</strong></span></div>
+      
+      <!-- We build the totals table with DIVs to completely avoid wkhtmltopdf's table background rendering bugs -->
+      <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background: #ffffff;">
+        
+        <div class="clearfix" style="border-bottom: 1px solid #e5e7eb;">
+          <div class="text-left" style="float: left; width: 55%; padding: 8px 10px; background: #f8fafc; font-weight: 600; border-right: 1px solid #e5e7eb;">{{ _("Subtotal Gravado") }}:</div>
+          <div class="text-right" style="float: right; width: 45%; padding: 8px 10px; color: #111827; white-space: nowrap;">{{ frappe.format(taxable, {"fieldtype": "Currency", "options": currency}) }}</div>
+        </div>
+        
+        <div class="clearfix" style="border-bottom: 1px solid #e5e7eb; display: {{ 'block' if (fiscal and fiscal.exempt_total) else 'none' }};">
+          <div class="text-left" style="float: left; width: 55%; padding: 8px 10px; background: #f8fafc; font-weight: 600; border-right: 1px solid #e5e7eb;">{{ _("Monto Exento") }}:</div>
+          <div class="text-right" style="float: right; width: 45%; padding: 8px 10px; color: #111827; white-space: nowrap;">{{ frappe.format(fiscal.exempt_total if fiscal else 0, {"fieldtype": "Currency", "options": currency}) }}</div>
+        </div>
+        
+        <div class="clearfix" style="border-bottom: 1px solid #e5e7eb;">
+          <div class="text-left" style="float: left; width: 55%; padding: 8px 10px; background: #f8fafc; font-weight: 600; border-right: 1px solid #e5e7eb;">{{ _("Total ITBIS") }}:</div>
+          <div class="text-right" style="float: right; width: 45%; padding: 8px 10px; color: #111827; white-space: nowrap;">{{ frappe.format(taxes, {"fieldtype": "Currency", "options": currency}) }}</div>
+        </div>
+        
+        <div class="clearfix" style="background: #2563eb; color: #ffffff;">
+          <div class="text-left" style="float: left; width: 45%; padding: 13px 10px; font-weight: 700; font-size: 12px; text-transform: uppercase; color: #ffffff;">{{ _("TOTAL A PAGAR") }}</div>
+          <div class="text-right" style="float: right; width: 55%; padding: 10px 10px; font-weight: 800; font-size: 16px; white-space: nowrap; color: #ffffff;">{{ frappe.format(total, {"fieldtype": "Currency", "options": currency}) }}</div>
+        </div>
+
+      </div>
     </div>
   </div>
 
-  {% if not fiscal and doc.docstatus == 0 %}
-    <div class="ri-footer">{{ _("Draft — not a fiscal document.") }}</div>
-  {% elif not fiscal %}
-    <div class="ri-footer">{{ _("This document is not an e-CF printed representation and is not valid for fiscal purposes.") }}</div>
-  {% elif invalid_fiscal %}
-    <div class="ri-footer">{{ _("This document is not valid for fiscal purposes.") }}</div>
-  {% endif %}
+  <!-- Custom Footer -->
+  <div style="border-top: 1px solid #d1d5db; margin-top: 35px; padding-top: 10px; text-align: center; color: #6b7280; font-size: 10px;">
+    {{ _("Generado por") }}: <strong>bohio.app</strong> | {{ _("Fecha") }}: {{ frappe.format(frappe.utils.today(), {"fieldtype": "Date"}) }}
+  </div>
+
+  <div class="text-center" style="color: #9ca3af; font-size: 8.5px; margin-top: 15px;">
+    {% if not fiscal and doc.docstatus == 0 %}
+      {{ _("Borrador — no es un documento fiscal.") }}
+    {% elif not fiscal %}
+      {{ _("Este documento no es una representación impresa de e-CF y no es válido para fines fiscales.") }}
+    {% elif invalid_fiscal or temporary_validation_error %}
+      {{ _("Este documento no es válido para fines fiscales.") }}
+    {% endif %}
+  </div>
 </div>

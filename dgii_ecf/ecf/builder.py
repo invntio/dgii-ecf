@@ -145,7 +145,7 @@ def _items_and_totals(si) -> tuple[list, dict]:
                 "NombreItem": (it.item_name or it.item_code)[:80],
                 "IndicadorBienoServicio": 2 if _is_service(it.item_code) else 1,
                 "CantidadItem": flt(it.qty),
-                "UnidadMedida": 43,  # 43=unit; right for condo fees/services (see skill)
+                "UnidadMedida": 43,  # DGII catalog: generic unit/service.
                 "PrecioUnitarioItem": _money(it.rate),
                 "MontoItem": amount,
             }

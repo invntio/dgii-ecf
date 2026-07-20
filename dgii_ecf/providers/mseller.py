@@ -40,6 +40,8 @@ def _normalize_status(status: str | None) -> str | None:
 
 
 class MSellerProvider(EcfProvider):
+    status_batch_size = 100
+
     def __init__(self, settings):
         super().__init__(settings)
         self._client_inst: MSellerClient | None = None
@@ -49,7 +51,7 @@ class MSellerProvider(EcfProvider):
     def _token_key(self) -> str:
         # Keyed by LOGIN identity, not company: with a platform gateway account the
         # same bearer token serves every company (their API Key does the tenant
-        # scoping), so one login covers all condos in an environment.
+        # scoping), so one login covers all tenants in an environment.
         return f"mseller_token:{self._login_email}:{self.settings.environment}"
 
     def _client(self) -> MSellerClient:
@@ -159,7 +161,7 @@ class MSellerProvider(EcfProvider):
         return out
 
     def _throttle(self):
-        """Conservative cross-worker pacing for MSeller's smallest plan.
+        """Configurable cross-worker pacing for the active provider contract.
 
         Provider settings may raise the limit for a contracted plan.  The Redis
         lock makes the spacing apply across every Frappe worker serving the same

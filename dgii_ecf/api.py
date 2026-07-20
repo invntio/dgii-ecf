@@ -13,16 +13,28 @@ from dgii_ecf.delivery import (
     REMOTE_IN_FLIGHT_STATUSES,
     apply_remote_result,
     apply_transition,
+    ecf_operator_presentation,
     record_event,
     record_not_found,
+    sanitized_text,
 )
 from dgii_ecf.ecf.builder import build_ecf_json, pick_ecf_type
+from dgii_ecf.event_types import (
+    BLOCKED_STATUS_NOT_FOUND,
+    DELIVERY_FAILED,
+    MANUAL_RETRY,
+    OUTBOX_PREPARED,
+    POST_RECEIVED,
+    POST_STARTED,
+    RECONCILED,
+    REMOTE_STATUS,
+)
 from dgii_ecf.provider_health import provider_call
 from dgii_ecf.providers.registry import get_provider
-from dgii_ecf.mseller.client import (
-    MSellerAuthError,
-    MSellerConnectionError,
-    MSellerHTTPError,
+from dgii_ecf.providers.errors import (
+    ProviderAuthError,
+    ProviderConnectionError,
+    ProviderHTTPError,
 )
 
 _MANUAL_RETRY_STATUSES = ("ERROR", "Rechazado", "UNCONFIRMED")
@@ -121,7 +133,7 @@ def prepare_sales_invoice(sales_invoice: str):
             "request_json": frappe.as_json(ecf_json),
         }
     ).insert(ignore_permissions=True)
-    record_event(log, "Outbox Prepared", status_after="Pending")
+    record_event(log, OUTBOX_PREPARED, status_after="Pending")
     return log
 
 
@@ -165,7 +177,7 @@ def _send_ecf_log(ecf_log: str, force: bool = False) -> dict:
             "alert_level": None,
             "last_alert_signature": None,
         },
-        "POST Started",
+        POST_STARTED,
     )
     # The outbox and attempt marker must survive a worker crash after MSeller
     # accepts the POST but before our local response handling completes.
@@ -183,7 +195,7 @@ def _send_ecf_log(ecf_log: str, force: bool = False) -> dict:
 
     if not res.status:
         res.status = "RECIBIDO"
-    apply_remote_result(log.name, res, event_type="POST Received")
+    apply_remote_result(log.name, res, event_type=POST_RECEIVED)
     frappe.db.commit()
     return frappe.get_doc("ECF Document Log", log.name).as_dict()
 
@@ -193,7 +205,7 @@ def reconcile_ecf_log(
     resend_if_missing: bool = True,
     resend_remote_failure: bool = False,
 ) -> dict:
-    """Resolve an uncertain POST by querying MSeller before retransmission."""
+    """Resolve an uncertain POST by querying the provider before retransmission."""
     log = frappe.get_doc("ECF Document Log", ecf_log)
     if log.status in ACCEPTED_STATUSES:
         return log.as_dict()
@@ -208,13 +220,19 @@ def reconcile_ecf_log(
 
     result = next((item for item in results if item.encf == log.encf), None)
     if result and result.success:
-        apply_remote_result(log.name, result, event_type="Reconciled")
+        apply_remote_result(log.name, result, event_type=RECONCILED)
         frappe.db.commit()
         if result.status in BLOCKED_STATUSES and resend_remote_failure:
             return send_ecf_log(log.name, force=True)
         return frappe.get_doc("ECF Document Log", log.name).as_dict()
 
-    if log.status in BLOCKED_STATUSES and not resend_remote_failure:
+    explicitly_not_found = bool(
+        result
+        and not result.success
+        and isinstance(result.raw, dict)
+        and result.raw.get("found") is False
+    )
+    if explicitly_not_found and log.status in BLOCKED_STATUSES and not resend_remote_failure:
         apply_transition(
             log.name,
             {
@@ -223,8 +241,29 @@ def reconcile_ecf_log(
                 "next_retry_at": None,
                 "next_status_check_at": None,
             },
-            "Blocked Status Not Found",
+            BLOCKED_STATUS_NOT_FOUND,
             response={"found": False},
+        )
+        frappe.db.commit()
+        return frappe.get_doc("ECF Document Log", log.name).as_dict()
+
+    if not explicitly_not_found:
+        next_retry_at = (
+            add_to_date(now_datetime(), minutes=2)
+            if log.status == "UNCONFIRMED"
+            else log.next_retry_at
+        )
+        apply_transition(
+            log.name,
+            {
+                "status": log.status,
+                "last_status_checked_at": now_datetime(),
+                "next_retry_at": next_retry_at,
+                "error_kind": "Provider",
+                "error": "Provider status response omitted this eNCF or was ambiguous.",
+            },
+            REMOTE_STATUS,
+            response={"batch_result": "omitted_or_ambiguous"},
         )
         frappe.db.commit()
         return frappe.get_doc("ECF Document Log", log.name).as_dict()
@@ -245,6 +284,7 @@ def _apply_result(log_name: str, res, fallback_status: str | None = None):
 
 def _record_failure(log_name: str, exc: Exception, attempt: int):
     status, kind, http_status, retry = _classify_failure(exc)
+    safe_error = sanitized_text(exc)
     apply_transition(
         log_name,
         {
@@ -252,21 +292,23 @@ def _record_failure(log_name: str, exc: Exception, attempt: int):
             "error_kind": kind,
             "last_http_status": http_status or 0,
             "next_retry_at": _next_retry_at(attempt) if retry else None,
-            "error": str(exc)[:1000],
+            "error": safe_error,
         },
-        "Delivery Failed",
-        response={"error": str(exc)},
+        DELIVERY_FAILED,
+        response={"error": safe_error},
     )
     frappe.db.commit()
-    frappe.logger("dgii_ecf").warning(f"MSeller delivery {log_name}: {kind}: {exc}")
+    frappe.logger("dgii_ecf").warning(
+        f"e-CF provider delivery {log_name}: {kind}: {safe_error}"
+    )
 
 
 def _classify_failure(exc: Exception) -> tuple[str, str, int | None, bool]:
-    if isinstance(exc, MSellerConnectionError):
+    if isinstance(exc, ProviderConnectionError):
         return "UNCONFIRMED", "Connection", None, True
-    if isinstance(exc, MSellerAuthError):
+    if isinstance(exc, ProviderAuthError):
         return "ERROR", "Authentication", exc.status_code, False
-    if isinstance(exc, MSellerHTTPError):
+    if isinstance(exc, ProviderHTTPError):
         if exc.status_code == 429:
             return "UNCONFIRMED", "Rate Limit", 429, True
         if exc.status_code >= 500:
@@ -317,7 +359,17 @@ def get_sales_invoice_ecf_state(sales_invoice: str) -> dict:
         "can_retry": not log or log.status in _MANUAL_RETRY_STATUSES,
         "can_refresh": bool(log and log.status not in ACCEPTED_STATUSES),
         "log": log,
+        "presentation": ecf_operator_presentation(log) if log else None,
     }
+
+
+@frappe.whitelist()
+def get_ecf_log_operator_state(ecf_log: str) -> dict:
+    """Return actionable UI copy while retaining the provider's raw status."""
+    log = frappe.get_doc("ECF Document Log", ecf_log)
+    if not frappe.has_permission("ECF Document Log", "read", doc=log, throw=False):
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
+    return {"status": log.status, "presentation": ecf_operator_presentation(log)}
 
 
 @frappe.whitelist()
@@ -361,6 +413,13 @@ def retry_sales_invoice(sales_invoice: str) -> dict:
     validate_sales_invoice_readiness(si)
 
     log = prepare_sales_invoice(si.name)
+    record_event(
+        log,
+        MANUAL_RETRY,
+        status_before=log.status,
+        status_after=log.status,
+        actor=frappe.session.user,
+    )
     frappe.enqueue(
         "dgii_ecf.api.reconcile_ecf_log",
         queue="long",
@@ -413,7 +472,7 @@ def query_status(encf: str) -> dict:
     provider = get_provider(log.company)
     res = provider_call(log.company, lambda: provider.get_status(encf))
     if res.status:
-        apply_remote_result(log.name, res, event_type="Manual Status Refresh")
+        apply_remote_result(log.name, res, event_type=REMOTE_STATUS)
         frappe.db.commit()
     return frappe.get_doc("ECF Document Log", log.name).as_dict()
 
