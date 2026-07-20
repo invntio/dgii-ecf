@@ -96,7 +96,6 @@
       <div style="color: #374151; line-height: 1.35;">
         {% if fiscal %}
           <div><strong>{{ _("e-NCF") }}:</strong> {{ fiscal.encf }}</div>
-          {% if fiscal.status %}<div><strong>{{ _("Estado e-CF") }}:</strong> {{ fiscal.status }}</div>{% endif %}
           {% if fiscal.sequence_expiry %}<div><strong>{{ _("Fecha de Vencimiento") }}:</strong> {{ fiscal.sequence_expiry }}</div>{% endif %}
           {% if fiscal.modified_encf %}<div style="margin-top: 2px;"><strong>{{ _("NCF Modificado") }}:</strong> {{ fiscal.modified_encf }}</div>{% endif %}
           {% if fiscal.correction_reason %}<div>{{ fiscal.correction_reason }}</div>{% endif %}
